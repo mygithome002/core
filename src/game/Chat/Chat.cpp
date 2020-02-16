@@ -719,7 +719,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "player_factionchange_items",  SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadFactionChangeItems,             "", nullptr },
         { "player_factionchange_quests", SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadFactionChangeQuests,            "", nullptr },
         { "player_factionchange_mounts", SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadFactionChangeMounts,            "", nullptr },
-        { "creature_model_info",         SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadCreatureModelInfo,              "", nullptr },
+        { "creature_display_info_addon", SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadCreatureDisplayInfoAddon,       "", nullptr },
         { "ip_banned",                   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadIPBanList,                      "", nullptr },
         { "account_banned",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadAccountBanList,                 "", nullptr },
         { "instance_buff_removal",       SEC_DEVELOPPER,    true,  &ChatHandler::HandleReloadInstanceBuffRemoval,            "", nullptr },
@@ -3213,10 +3213,10 @@ bool ChatHandler::ExtractLocationFromLink(char** text, uint32& mapid, float& x, 
 
             if (CreatureData const* data = sObjectMgr.GetCreatureData(lowguid))
             {
-                mapid = data->mapid;
-                x = data->posX;
-                y = data->posY;
-                z = data->posZ;
+                mapid = data->position.mapId;
+                x = data->position.x;
+                y = data->position.y;
+                z = data->position.z;
                 return true;
             }
             else
@@ -3230,10 +3230,10 @@ bool ChatHandler::ExtractLocationFromLink(char** text, uint32& mapid, float& x, 
 
             if (GameObjectData const* data = sObjectMgr.GetGOData(lowguid))
             {
-                mapid = data->mapid;
-                x = data->posX;
-                y = data->posY;
-                z = data->posZ;
+                mapid = data->position.mapId;
+                x = data->position.x;
+                y = data->position.y;
+                z = data->position.z;
                 return true;
             }
             else
@@ -3253,10 +3253,10 @@ bool ChatHandler::ExtractLocationFromLink(char** text, uint32& mapid, float& x, 
 
                 if (CreatureDataPair const* dataPair = worker.GetResult())
                 {
-                    mapid = dataPair->second.mapid;
-                    x = dataPair->second.posX;
-                    y = dataPair->second.posY;
-                    z = dataPair->second.posZ;
+                    mapid = dataPair->second.position.mapId;
+                    x = dataPair->second.position.x;
+                    y = dataPair->second.position.y;
+                    z = dataPair->second.position.z;
                     return true;
                 }
                 else
@@ -3279,10 +3279,10 @@ bool ChatHandler::ExtractLocationFromLink(char** text, uint32& mapid, float& x, 
 
                 if (GameObjectDataPair const* dataPair = worker.GetResult())
                 {
-                    mapid = dataPair->second.mapid;
-                    x = dataPair->second.posX;
-                    y = dataPair->second.posY;
-                    z = dataPair->second.posZ;
+                    mapid = dataPair->second.position.mapId;
+                    x = dataPair->second.position.x;
+                    y = dataPair->second.position.y;
+                    z = dataPair->second.position.z;
                     return true;
                 }
                 else

@@ -494,6 +494,33 @@ struct GameObjectInfo
         }
     }
 
+    bool IsLargeGameObject() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_BUTTON:            return button.large != 0;
+            case GAMEOBJECT_TYPE_QUESTGIVER:        return questgiver.large != 0;
+            case GAMEOBJECT_TYPE_GENERIC:           return _generic.large != 0;
+            case GAMEOBJECT_TYPE_TRAP:              return trap.large != 0;
+            case GAMEOBJECT_TYPE_SPELL_FOCUS:       return spellFocus.large != 0;
+            case GAMEOBJECT_TYPE_GOOBER:            return goober.large != 0;
+            case GAMEOBJECT_TYPE_SPELLCASTER:       return spellcaster.large != 0;
+            case GAMEOBJECT_TYPE_CAPTURE_POINT:     return capturePoint.large != 0;
+            default: return false;
+        }
+    }
+
+    bool IsInfiniteGameObject() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_DOOR:                  return true;
+            case GAMEOBJECT_TYPE_FLAGSTAND:             return true;
+            case GAMEOBJECT_TYPE_FLAGDROP:              return true;
+            default: return false;
+        }
+    }
+
     uint32 GetEventScriptId() const
     {
         switch(type)
@@ -532,11 +559,7 @@ enum GOState
 struct GameObjectData
 {
     uint32 id;                                              // entry in gamobject_template
-    uint32 mapid;
-    float posX;
-    float posY;
-    float posZ;
-    float orientation;
+    WorldLocation position;
     float rotation0;
     float rotation1;
     float rotation2;
@@ -545,8 +568,8 @@ struct GameObjectData
     int32  spawntimesecsmax;
     uint32 animprogress;
     GOState go_state;
-    uint32 spawnFlags;
-    float visibilityModifier;
+    uint32 spawn_flags;
+    float visibility_mod;
 
     uint32 instanciatedContinentInstanceId;
     uint32 ComputeRespawnDelay(uint32 baseDelay) const;

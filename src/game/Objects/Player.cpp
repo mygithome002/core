@@ -12499,8 +12499,8 @@ void Player::SendPreparedQuest(ObjectGuid guid)
             {
                 if (BroadcastText const* bct = sObjectMgr.GetBroadcastTextLocale(gossiptext->Options[0].BroadcastTextID))
                 {
-                    qe._Emote = bct->EmoteId0;
-                    qe._Delay = bct->EmoteDelay0;
+                    qe._Emote = bct->emoteId1;
+                    qe._Delay = bct->emoteDelay1;
                     int loc_idx = GetSession()->GetSessionDbLocaleIndex();
                     title = bct->GetText(loc_idx, pCreature->GetGender(), false);
                 }
@@ -17618,10 +17618,10 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     else // single path
         m_taxi.AddTaxiDestination(lastNode);
 
-    // get mount model (in case non taximaster (npc==nullptr) allow more wide lookup)
+    // get mount display id (in case non taximaster (npc==nullptr) allow more wide lookup)
     uint32 mount_display_id = sObjectMgr.GetTaxiMountDisplayId(sourcenode, GetTeam(), npc == nullptr);
 
-    // in spell case allow 0 model
+    // in spell case allow display id to be 0
     if ((mount_display_id == 0 && spellid == 0) || sourcepath == 0)
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);

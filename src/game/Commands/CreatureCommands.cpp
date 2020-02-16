@@ -308,13 +308,14 @@ bool ChatHandler::HandleNpcSetDeathStateCommand(char* args)
         return false;
     }
 
+    CreatureData* pData = const_cast<CreatureData*>(sObjectMgr.GetCreatureData(pCreature->GetGUIDLow()));
+
     if (value)
-        pCreature->SetDeadByDefault(true);
+        pData->spawn_flags |= SPAWN_FLAG_DEAD;
     else
-        pCreature->SetDeadByDefault(false);
+        pData->spawn_flags &= ~SPAWN_FLAG_DEAD;
 
     pCreature->SaveToDB();
-
     pCreature->Respawn();
 
     return true;
@@ -386,7 +387,7 @@ bool ChatHandler::HandleNpcSpawnDistCommand(char* args)
     else
         return false;
 
-    pCreature->SetRespawnRadius((float)option);
+    pCreature->SetWanderDistance((float)option);
     pCreature->SetDefaultMovementType(mtype);
     pCreature->GetMotionMaster()->Initialize();
     if (pCreature->IsAlive())                               // dead creature will reset movement generator at respawn
@@ -697,7 +698,7 @@ bool ChatHandler::HandleNpcAddEntryCommand(char* args)
         return false;
     }
 
-    for (int i = 0; i < MAX_SPAWN_ID; i++)
+    for (int i = 0; i < MAX_CREATURE_IDS_PER_SPAWN; i++)
     {
         if (pData->creature_id[i] == uiCreatureId)
         {
@@ -707,7 +708,7 @@ bool ChatHandler::HandleNpcAddEntryCommand(char* args)
         }
     }
 
-    if (pData->GetCreatureIdCount() >= MAX_SPAWN_ID)
+    if (pData->GetCreatureIdCount() >= MAX_CREATURE_IDS_PER_SPAWN)
     {
         SendSysMessage("Creature spawn has the maximum amount of entries already.");
         SetSentErrorMessage(true);
@@ -715,8 +716,8 @@ bool ChatHandler::HandleNpcAddEntryCommand(char* args)
     }
 
     int count = 0;
-    std::array<uint32, MAX_SPAWN_ID> creatureIds = pData->creature_id;
-    for (int i = 0; i < MAX_SPAWN_ID; i++)
+    std::array<uint32, MAX_CREATURE_IDS_PER_SPAWN> creatureIds = pData->creature_id;
+    for (int i = 0; i < MAX_CREATURE_IDS_PER_SPAWN; i++)
     {
         if (!creatureIds[i])
         {
@@ -866,9 +867,8 @@ bool ChatHandler::HandleNpcMoveCommand(char* args)
             SetSentErrorMessage(true);
             return false;
         }
-        
 
-        if (pPlayer->GetMapId() != data->mapid)
+        if (pPlayer->GetMapId() != data->position.mapId)
         {
             PSendSysMessage(LANG_COMMAND_CREATUREATSAMEMAP, lowguid);
             SetSentErrorMessage(true);
@@ -943,7 +943,7 @@ bool ChatHandler::HandleNpcSetMoveTypeCommand(char* args)
 
         Player* player = m_session->GetPlayer();
 
-        if (player->GetMapId() != data->mapid)
+        if (player->GetMapId() != data->position.mapId)
         {
             PSendSysMessage(LANG_COMMAND_CREATUREATSAMEMAP, lowguid);
             SetSentErrorMessage(true);
@@ -1402,7 +1402,7 @@ bool ChatHandler::HandleWpAddCommand(char* args)
             return false;
         }
 
-        if (m_session->GetPlayer()->GetMapId() != data->mapid)
+        if (m_session->GetPlayer()->GetMapId() != data->position.mapId)
         {
             PSendSysMessage(LANG_COMMAND_CREATUREATSAMEMAP, dbGuid);
             SetSentErrorMessage(true);
@@ -1993,7 +1993,7 @@ bool ChatHandler::HandleWpExportCommand(char* args)
             return false;
         }
 
-        if (m_session->GetPlayer()->GetMapId() != data->mapid)
+        if (m_session->GetPlayer()->GetMapId() != data->position.mapId)
         {
             PSendSysMessage(LANG_COMMAND_CREATUREATSAMEMAP, dbGuid);
             SetSentErrorMessage(true);
