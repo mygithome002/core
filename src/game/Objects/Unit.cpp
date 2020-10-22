@@ -80,26 +80,6 @@ float baseMoveSpeed[MAX_MOVE_TYPE] =
     3.141594f,                                              // MOVE_TURN_RATE
 };
 
-
-////////////////////////////////////////////////////////////
-// Methods of class GlobalCooldownMgr
-
-bool GlobalCooldownMgr::HasGlobalCooldown(SpellEntry const* spellInfo) const
-{
-    GlobalCooldownList::const_iterator itr = m_GlobalCooldowns.find(spellInfo->StartRecoveryCategory);
-    return itr != m_GlobalCooldowns.end() && itr->second.duration && WorldTimer::getMSTimeDiff(itr->second.cast_time, WorldTimer::getMSTime()) < itr->second.duration;
-}
-
-void GlobalCooldownMgr::AddGlobalCooldown(SpellEntry const* spellInfo, uint32 gcd)
-{
-    m_GlobalCooldowns[spellInfo->StartRecoveryCategory] = GlobalCooldown(gcd, WorldTimer::getMSTime());
-}
-
-void GlobalCooldownMgr::CancelGlobalCooldown(SpellEntry const* spellInfo)
-{
-    m_GlobalCooldowns[spellInfo->StartRecoveryCategory].duration = 0;
-}
-
 ////////////////////////////////////////////////////////////
 // Methods of class Unit
 
@@ -111,8 +91,9 @@ Unit::Unit()
 {
     m_objectType |= TYPEMASK_UNIT;
     m_objectTypeId = TYPEID_UNIT;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
     m_updateFlag = (UPDATEFLAG_ALL | UPDATEFLAG_LIVING | UPDATEFLAG_HAS_POSITION);
-
+#endif
     m_attackTimer[BASE_ATTACK]   = 0;
     m_attackTimer[OFF_ATTACK]    = 0;
     m_attackTimer[RANGED_ATTACK] = 0;
@@ -240,29 +221,9 @@ void Unit::Update(uint32 update_diff, uint32 p_time)
     if (!IsInWorld())
         return;
 
-    // Nostalrius : systeme de contresort des mobs.
-    // Boucle 1 pour regler les timers
-    for (auto& it : m_prohibitSpell)
-    {
-        if (it.RestingMsTime < update_diff)
-            it.RestingMsTime = 0;
-        else
-            it.RestingMsTime -= update_diff;
-    }
-    // Boucle 2 : supprimer les sorts avec Timer=0
-    for (ProhibitSpellList::iterator it = m_prohibitSpell.begin(); it != m_prohibitSpell.end();)
-    {
-        if (it->RestingMsTime == 0)
-        {
-            m_prohibitSpell.erase(it);
-            it = m_prohibitSpell.begin();
-            continue;
-        }
-        ++it;
-    }
-
     // Buffer spell system update time to save on performance when players are updated twice per
     // world update. We do not need to update spells when the interval is only a few ms (~10ms)
+    UpdateCooldowns(sWorld.GetCurrentClockTime());
     m_spellUpdateTimeBuffer += update_diff;
     if (m_spellUpdateTimeBuffer >= UNIT_SPELL_UPDATE_TIME_BUFFER)
     {
@@ -391,7 +352,7 @@ AutoAttackCheckResult Unit::CanAutoAttackTarget(Unit const* pVictim) const
     if (!CanReachWithMeleeAutoAttack(pVictim) || (!IsWithinLOSInMap(pVictim) && !HasUnitState(UNIT_STAT_ALLOW_LOS_ATTACK)))
         return ATTACK_RESULT_NOT_IN_RANGE;
 
-    if (GetDistance2dToCenter(pVictim) > AUTO_ATTACK_FACING_LEEWAY)
+    if (GetDistance2dToCenter(pVictim) > NO_FACING_CHECKS_DISTANCE)
     {
         if (!HasInArc(2 * M_PI_F / 3, pVictim))
             return ATTACK_RESULT_BAD_FACING;
@@ -505,13 +466,16 @@ bool Unit::HaveOffhandWeapon() const
 
 void Unit::SendHeartBeat(bool includingSelf)
 {
-    //m_movementInfo.ChangePosition(GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
+    SendMovementPacket(MSG_MOVE_HEARTBEAT, includingSelf);
+}
+
+void Unit::SendMovementPacket(uint16 opcode, bool includingSelf)
+{
     m_movementInfo.UpdateTime(WorldTimer::getMSTime());
+    WorldPacket data(opcode);
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-    WorldPacket data(MSG_MOVE_HEARTBEAT, 31);
     data << GetPackGUID();
 #else
-    WorldPacket data(MSG_MOVE_HEARTBEAT);
     data << GetGUID();
 #endif
     data << m_movementInfo;
@@ -1231,7 +1195,7 @@ void Unit::Kill(Unit* pVictim, SpellEntry const* spellProto, bool durabilityLoss
                 playerKiller = pPlayerTap;
 
             if (playerKiller)
-                pCreatureVictim->GetMap()->BindToInstanceOrRaid(playerKiller, pCreatureVictim->GetRespawnTimeEx(), pCreatureVictim->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_INSTANCE_BIND);
+                pCreatureVictim->GetMap()->BindToInstanceOrRaid(playerKiller, pCreatureVictim->GetRespawnTimeEx(), pCreatureVictim->HasExtraFlag(CREATURE_FLAG_EXTRA_INSTANCE_BIND));
         }
     }
 
@@ -1288,22 +1252,12 @@ void Unit::CastStop(uint32 except_spellid)
                 InterruptSpell(CurrentSpellTypes(i), false);
 }
 
-
-
-
-
-
-
-
-
-
-
 // Obsolete func need remove, here only for comotability vs another patches
-uint32 Unit::SpellNonMeleeDamageLog(Unit* pVictim, uint32 spellID, uint32 damage)
+uint32 Unit::SpellNonMeleeDamageLog(Unit* pVictim, uint32 spellId, uint32 damage)
 {
-    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellID);
+    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellId);
     SpellNonMeleeDamage damageInfo(this, pVictim, spellInfo->Id, SpellSchools(spellInfo->School));
-    CalculateSpellDamage(&damageInfo, damage, spellInfo);
+    CalculateSpellDamage(&damageInfo, damage, spellInfo, EFFECT_INDEX_0);
     damageInfo.target->CalculateAbsorbResistBlock(this, &damageInfo, spellInfo);
     DealDamageMods(damageInfo.target, damageInfo.damage, &damageInfo.absorb);
     SendSpellNonMeleeDamageLog(&damageInfo);
@@ -1329,17 +1283,17 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, uint32 damage, CalcDamageInfo* da
         case BASE_ATTACK:
             damageInfo->procAttacker = PROC_FLAG_SUCCESSFUL_MELEE_HIT;
             damageInfo->procVictim   = PROC_FLAG_TAKEN_MELEE_HIT;
-            damageInfo->HitInfo      = HITINFO_NORMALSWING2;
+            damageInfo->HitInfo      = HITINFO_NORMALSWING + HITINFO_AFFECTS_VICTIM;
             break;
         case OFF_ATTACK:
             damageInfo->procAttacker = PROC_FLAG_SUCCESSFUL_MELEE_HIT | PROC_FLAG_SUCCESSFUL_OFFHAND_HIT;
             damageInfo->procVictim   = PROC_FLAG_TAKEN_MELEE_HIT;//|PROC_FLAG_TAKEN_OFFHAND_HIT // not used
-            damageInfo->HitInfo = HITINFO_LEFTSWING;
+            damageInfo->HitInfo      = HITINFO_LEFTSWING + HITINFO_AFFECTS_VICTIM;
             break;
         case RANGED_ATTACK:
             damageInfo->procAttacker = PROC_FLAG_SUCCESSFUL_RANGED_HIT;
             damageInfo->procVictim   = PROC_FLAG_TAKEN_RANGED_HIT;
-            damageInfo->HitInfo = HITINFO_UNK3;             // test (dev note: test what? HitInfo flag possibly not confirmed.)
+            damageInfo->HitInfo      = HITINFO_UNK3;             // test (dev note: test what? HitInfo flag possibly not confirmed.)
             break;
         default:
             break;
@@ -1370,8 +1324,8 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, uint32 damage, CalcDamageInfo* da
 
         subDamage->damage = CalculateDamage(damageInfo->attackType, false, i);
         // Add melee damage bonus
-        subDamage->damage = MeleeDamageBonusDone(damageInfo->target, subDamage->damage, damageInfo->attackType, nullptr, DIRECT_DAMAGE, 1, nullptr, i == 0);
-        subDamage->damage = damageInfo->target->MeleeDamageBonusTaken(this, subDamage->damage, damageInfo->attackType, nullptr, DIRECT_DAMAGE, 1, nullptr, i == 0);
+        subDamage->damage = MeleeDamageBonusDone(damageInfo->target, subDamage->damage, damageInfo->attackType, nullptr, EFFECT_INDEX_0, DIRECT_DAMAGE, 1, nullptr, i == 0);
+        subDamage->damage = damageInfo->target->MeleeDamageBonusTaken(this, subDamage->damage, damageInfo->attackType, nullptr, EFFECT_INDEX_0, DIRECT_DAMAGE, 1, nullptr, i == 0);
 
         // Calculate armor reduction
         if (subDamage->damageSchoolMask == SPELL_SCHOOL_MASK_NORMAL)
@@ -1605,6 +1559,10 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, uint32 damage, CalcDamageInfo* da
     }
     else
         damageInfo->totalDamage = 0;
+
+    // No animation on victim in this case.
+    if (!damageInfo->totalDamage && (damageInfo->HitInfo & (HITINFO_MISS | HITINFO_ABSORB)))
+        damageInfo->HitInfo &= ~HITINFO_AFFECTS_VICTIM;
 }
 
 void Unit::DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss)
@@ -1619,7 +1577,7 @@ void Unit::DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss)
         return;
 
     // Hmmmm dont like this emotes client must by self do all animations
-    if (damageInfo->HitInfo & HITINFO_CRITICALHIT)
+    if (damageInfo->totalDamage && (damageInfo->HitInfo & HITINFO_CRITICALHIT))
     {
         if (!(pVictim->IsCreature() && 
            (static_cast<Creature*>(pVictim)->GetCreatureInfo()->type_flags & CREATURE_TYPEFLAGS_NO_WOUND_ANIM)))
@@ -2093,9 +2051,9 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool che
 
     uint32 hitInfo;
     if (attType == BASE_ATTACK)
-        hitInfo = HITINFO_NORMALSWING2;
+        hitInfo = HITINFO_NORMALSWING + HITINFO_AFFECTS_VICTIM;
     else if (attType == OFF_ATTACK)
-        hitInfo = HITINFO_LEFTSWING;
+        hitInfo = HITINFO_LEFTSWING + HITINFO_AFFECTS_VICTIM;
     else
         return;                                             // ignore ranged case
 
@@ -2165,7 +2123,6 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* pVictim, WeaponAttackT
 
 MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* pVictim, WeaponAttackType attType, int32 crit_chance, int32 miss_chance, int32 dodge_chance, int32 parry_chance, int32 block_chance, bool SpellCasted) const
 {
-    // Nostalrius : cheat.
     if (IsPlayer() && ToPlayer()->HasCheatOption(PLAYER_CHEAT_ALWAYS_CRIT))
         return MELEE_HIT_CRIT;
 
@@ -2231,9 +2188,9 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* pVictim, WeaponAttackT
 
     // parry chances
     // check if attack comes from behind, nobody can parry or block if attacker is behind
-    if (!from_behind)
+    if (!from_behind && (parry_chance > 0))
     {
-        if (parry_chance > 0 && (pVictim->IsPlayer() || !(((Creature*)pVictim)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_PARRY)))
+        if (pVictim->IsPlayer() || !((Creature*)pVictim)->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_PARRY))
         {
             parry_chance -= parrySkillBonus;
 
@@ -2280,9 +2237,9 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* pVictim, WeaponAttackT
 
     // block chances
     // check if attack comes from behind, nobody can parry or block if attacker is behind
-    if (!from_behind)
+    if (!from_behind && (block_chance > 0))
     {
-        if ((pVictim->IsPlayer() || !(((Creature*)pVictim)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_BLOCK))
+        if ((pVictim->IsPlayer() || !((Creature*)pVictim)->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_BLOCK))
           && !(IsCreature() && GetMeleeDamageSchoolMask() != SPELL_SCHOOL_MASK_NORMAL))  // can't block elemental melee attacks from mobs
         {
             block_chance -= blockSkillBonus;
@@ -2324,10 +2281,10 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* pVictim, WeaponAttackT
     }
 
     if ((!IsPlayer() && !IsPet()) &&
-        !(((Creature*)this)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_CRUSH) &&
+        !((Creature*)this)->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_CRUSH) &&
         !SpellCasted /*Only autoattack can be crashing blow*/)
     {
-        if (((Creature*)this)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_ALWAYS_CRUSH)
+        if (((Creature*)this)->HasExtraFlag(CREATURE_FLAG_EXTRA_ALWAYS_CRUSH))
         {
             return MELEE_HIT_CRUSHING;
         }
@@ -2447,7 +2404,7 @@ bool Unit::IsSpellBlocked(WorldObject* pCaster, Unit* pVictim, SpellEntry const*
     // Check creatures flags_extra for disable block
     if (Creature const* pCreature = ToCreature())
     {
-        if (pCreature->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_BLOCK)
+        if (pCreature->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_BLOCK))
             return false;
     }
 
@@ -2824,29 +2781,33 @@ void Unit::_UpdateSpells(uint32 time)
 
 void Unit::_UpdateAutoRepeatSpell()
 {
-    //check "realtime" interrupts
-    if ((IsPlayer() && ((Player*)this)->IsMoving()) || IsNonMeleeSpellCasted(false, false, true))
+    // check "realtime" interrupts
+    if ((IsPlayer() && IsMoving()) || IsNonMeleeSpellCasted(false, false, true))
     {
         // cancel wand shoot
         if (m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->m_spellInfo->Category == 351)
             InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+        // set 0.5 second wind-up time.
         m_AutoRepeatFirstCast = true;
         return;
     }
 
-    //apply delay
+    // apply delay
     if (m_AutoRepeatFirstCast && GetAttackTimer(RANGED_ATTACK) < 500)
         SetAttackTimer(RANGED_ATTACK, 500);
     m_AutoRepeatFirstCast = false;
 
-    //castroutine
+    // castroutine
     if (IsAttackReady(RANGED_ATTACK))
     {
         // Check if able to cast
         // We need to update pointers before calling CheckCast !
         m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->UpdatePointers();
         SpellCastResult result = m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CheckCast(true);
-        if (result == SPELL_FAILED_MOVING) // Just delay it if moving
+
+        // Just delay it if moving
+        if (result == SPELL_FAILED_MOVING ||
+            result == SPELL_FAILED_NOT_READY)
             return;
 
         if (result != SPELL_CAST_OK)
@@ -2904,6 +2865,17 @@ bool Unit::IsBehindTarget(Unit const* pTarget, bool strict) const
     }
 
     return !pTarget->HasInArc(M_PI_F, this);
+}
+
+bool Unit::CantPathToVictim() const
+{
+    if (!GetVictim())
+        return false;
+
+    if (GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE)
+        return false;
+
+    return !GetMotionMaster()->GetCurrent()->IsReachable();
 }
 
 bool Unit::IsInAccessablePlaceFor(Creature const* c) const
@@ -4020,15 +3992,12 @@ void Unit::AddGameObject(GameObject* pGo)
 
     if (pGo->GetSpellId())
     {
-        if (Player* pPlayer = ToPlayer())
+        if (SpellEntry const* pCreateBySpell = sSpellMgr.GetSpellEntry(pGo->GetSpellId()))
         {
-            if (SpellEntry const* pCreateBySpell = sSpellMgr.GetSpellEntry(pGo->GetSpellId()))
-            {
-                // Need disable spell use for owner
-                if (pCreateBySpell->HasAttribute(SPELL_ATTR_DISABLED_WHILE_ACTIVE))
-                    // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existing cases)
-                    pPlayer->AddSpellAndCategoryCooldowns(pCreateBySpell, 0, nullptr, true);
-            }
+            // Need disable spell use for owner
+            if (pCreateBySpell->HasAttribute(SPELL_ATTR_DISABLED_WHILE_ACTIVE))
+                // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existing cases)
+                AddCooldown(*pCreateBySpell);
         }
     }
 }
@@ -4050,7 +4019,7 @@ void Unit::RemoveGameObject(GameObject* pGo, bool del)
             if (pCreateBySpell->HasAttribute(SPELL_ATTR_DISABLED_WHILE_ACTIVE) &&
                 pGo->GetGoType() != GAMEOBJECT_TYPE_SUMMONING_RITUAL)
                 // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existing cases)
-                CooldownEvent(pCreateBySpell);
+                AddCooldown(*pCreateBySpell);
         }
         
     }
@@ -4997,7 +4966,7 @@ void Unit::SendEnvironmentalDamageLog(uint8 type, uint32 damage, uint32 absorb, 
  * Calculates target part of spell damage bonuses,
  * will be called on each tick for periodic damage over time auras
  */
-uint32 Unit::SpellDamageBonusTaken(WorldObject* pCaster, SpellEntry const* spellProto, uint32 pdamage, DamageEffectType damagetype, uint32 stack, Spell* spell) const
+uint32 Unit::SpellDamageBonusTaken(WorldObject* pCaster, SpellEntry const* spellProto, SpellEffectIndex effectIndex, uint32 pdamage, DamageEffectType damagetype, uint32 stack, Spell* spell) const
 {
     if (!spellProto || !pCaster || damagetype == DIRECT_DAMAGE)
         return pdamage;
@@ -5015,7 +4984,7 @@ uint32 Unit::SpellDamageBonusTaken(WorldObject* pCaster, SpellEntry const* spell
     int32 TakenAdvertisedBenefit = SpellBaseDamageBonusTaken(spellProto->GetSpellSchoolMask());
 
     // apply benefit affected by spell power implicit coeffs and spell level penalties
-    TakenTotal = SpellBonusWithCoeffs(spellProto, TakenTotal, TakenAdvertisedBenefit, 0, damagetype, false, pCaster, spell);
+    TakenTotal = SpellBonusWithCoeffs(spellProto, effectIndex, TakenTotal, TakenAdvertisedBenefit, 0, damagetype, false, pCaster, spell);
 
     float tmpDamage = (int32(pdamage) + TakenTotal * int32(stack)) * TakenTotalMod;
 
@@ -5140,7 +5109,7 @@ bool Unit::IsSpellCrit(Unit const* pVictim, SpellEntry const* spellProto, SpellS
  * Calculates target part of healing spell bonuses,
  * will be called on each tick for periodic damage over time auras
  */
-uint32 Unit::SpellHealingBonusTaken(WorldObject* pCaster, SpellEntry const* spellProto, int32 healamount, DamageEffectType damagetype, uint32 stack, Spell* spell) const
+uint32 Unit::SpellHealingBonusTaken(WorldObject* pCaster, SpellEntry const* spellProto, SpellEffectIndex effectIndex, int32 healamount, DamageEffectType damagetype, uint32 stack, Spell* spell) const
 {
     float  TakenTotalMod = 1.0f;
 
@@ -5185,7 +5154,7 @@ uint32 Unit::SpellHealingBonusTaken(WorldObject* pCaster, SpellEntry const* spel
         }
     }
     // apply benefit affected by spell power implicit coeffs and spell level penalties
-    TakenTotal = SpellBonusWithCoeffs(spellProto, TakenTotal, TakenAdvertisedBenefit, 0, damagetype, false, pCaster, spell);
+    TakenTotal = SpellBonusWithCoeffs(spellProto, effectIndex, TakenTotal, TakenAdvertisedBenefit, 0, damagetype, false, pCaster, spell);
 
     // Taken mods
     // Healing Wave cast
@@ -5341,7 +5310,7 @@ bool Unit::IsImmuneToSchool(SpellEntry const* spellInfo, uint8 effectMask) const
  * Calculates target part of melee damage bonuses,
  * will be called on each tick for periodic damage over time auras
  */
-uint32 Unit::MeleeDamageBonusTaken(WorldObject* pCaster, uint32 pdamage, WeaponAttackType attType, SpellEntry const* spellProto, DamageEffectType damagetype, uint32 stack, Spell* spell, bool flat)
+uint32 Unit::MeleeDamageBonusTaken(WorldObject* pCaster, uint32 pdamage, WeaponAttackType attType, SpellEntry const* spellProto, SpellEffectIndex effectIndex, DamageEffectType damagetype, uint32 stack, Spell* spell, bool flat)
 {
     if (!pCaster)
         return pdamage;
@@ -5392,7 +5361,7 @@ uint32 Unit::MeleeDamageBonusTaken(WorldObject* pCaster, uint32 pdamage, WeaponA
     if (!isWeaponDamageBasedSpell)
     {
         // apply benefit affected by spell power implicit coeffs and spell level penalties
-        TakenFlat = SpellBonusWithCoeffs(spellProto, 0, TakenFlat, 0, damagetype, false, pCaster, spell);
+        TakenFlat = SpellBonusWithCoeffs(spellProto, effectIndex, 0, TakenFlat, 0, damagetype, false, pCaster, spell);
     }
 
     if (!flat)
@@ -5475,6 +5444,17 @@ UnitDismountResult Unit::Unmount(bool from_aura)
     return DISMOUNTRESULT_OK;
 }
 
+bool Unit::IsShapeShifted() const
+{
+    // Mirroring clientside gameplay logic
+    if (ShapeshiftForm form = GetShapeshiftForm())
+    {
+        if (SpellShapeshiftFormEntry const* ssEntry = sSpellShapeshiftFormStore.LookupEntry(form))
+            return !(ssEntry->flags1 & SHAPESHIFT_FORM_FLAG_ALLOW_ACTIVITY);
+    }
+    return false;
+}
+
 bool Unit::IsInDisallowedMountForm() const
 {
     ShapeshiftForm form = GetShapeshiftForm();
@@ -5495,8 +5475,8 @@ bool Unit::IsInDisallowedMountForm() const
     CreatureModelDataEntry const* model = sCreatureModelDataStore.LookupEntry(display->ModelId);
     ChrRacesEntry const* race = sChrRacesStore.LookupEntry(displayExtra->Race);
 
-    if (model && !(model->flags & 0x80))
-        if (race && !(race->Flags & 0x4))
+    if (model && !model->HasFlag(CREATURE_MODEL_DATA_FLAGS_CAN_MOUNT))
+        if (race && !race->HasFlag(CHRRACES_FLAGS_CAN_MOUNT))
             return true;
 
     return false;
@@ -5550,7 +5530,7 @@ void Unit::SetInCombatState(bool bPvP, Unit* pEnemy)
         OnEnterCombat(pEnemy, true);
 
         // Some bosses are set into combat with zone
-        if (GetMap()->IsDungeon() && (pCreature->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_AGGRO_ZONE) && pEnemy && pEnemy->IsControlledByPlayer())
+        if (GetMap()->IsDungeon() && pCreature->HasExtraFlag(CREATURE_FLAG_EXTRA_AGGRO_ZONE) && pEnemy && pEnemy->IsControlledByPlayer())
             pCreature->SetInCombatWithZone();
         if (Spell* spell = m_currentSpells[CURRENT_CHANNELED_SPELL])
             if (spell->getState() == SPELL_STATE_CASTING)
@@ -5684,6 +5664,9 @@ bool Unit::IsTargetableForAttack(bool inverseAlive /*=false*/, bool isAttackerPl
         return false;
 
     if (isAttackerPlayer && HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER))
+        return false;
+
+    if (!isAttackerPlayer && HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC))
         return false;
 
     // Players or their pets can attack feigned players
@@ -5973,7 +5956,7 @@ bool Unit::IsVisibleForOrDetect(WorldObject const* pDetector, WorldObject const*
 
     if (Creature const* pCreature = ToCreature())
     {
-        if ((pCreature->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_ONLY_VISIBLE_TO_FRIENDLY) &&
+        if (pCreature->HasExtraFlag(CREATURE_FLAG_EXTRA_ONLY_VISIBLE_TO_FRIENDLY) &&
             !pCreature->IsFriendlyTo(pDetector))
             return false;
     } 
@@ -6215,7 +6198,7 @@ void Unit::CheckPendingMovementChanges()
         }
 
         // Not resendable change.
-        if (oldestChangeToAck.movementChangeType == INVALID || oldestChangeToAck.movementChangeType == KNOCK_BACK)
+        if (oldestChangeToAck.movementChangeType == INVALID || oldestChangeToAck.movementChangeType == TELEPORT || oldestChangeToAck.movementChangeType == KNOCK_BACK)
         {
             pController->GetCheatData()->OnFailedToAckChange();
             PopPendingMovementChange();
@@ -6378,6 +6361,25 @@ bool Unit::FindPendingMovementRootChange(uint32 movementCounter, bool applyRecei
     return false;
 }
 
+bool Unit::FindPendingMovementTeleportChange(uint32 movementCounter)
+{
+    for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
+    {
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+        movementCounter = pendingChange->movementCounter;
+#endif
+
+        if (pendingChange->movementCounter != movementCounter || pendingChange->movementChangeType != TELEPORT)
+            continue;
+
+        m_pendingMovementChanges.erase(pendingChange);
+        return true;
+    }
+
+    return false;
+}
+
 bool Unit::FindPendingMovementKnockbackChange(MovementInfo& movementInfo, uint32 movementCounter)
 {
     for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
@@ -6448,7 +6450,7 @@ bool Unit::IsMovedByPlayer() const
         if (pPossessor->GetCharmGuid() == GetObjectGuid())
             return true;
 
-    return IsPlayer();
+    return IsPlayer() && !static_cast<Player const*>(this)->GetSession()->GetBot();
 }
 
 PlayerMovementPendingChange::PlayerMovementPendingChange()
@@ -6862,7 +6864,7 @@ bool Unit::CanHaveThreatList() const
     if (pCreature->GetCharmerGuid().IsPlayer())
         return false;
 
-    if (pCreature->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_THREAT_LIST)
+    if (pCreature->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_THREAT_LIST))
         return false;
 
     return true;
@@ -7178,6 +7180,8 @@ uint32 Unit::GetCreatureType() const
         SpellShapeshiftFormEntry const* ssEntry = sSpellShapeshiftFormStore.LookupEntry(GetShapeshiftForm());
         if (ssEntry && ssEntry->creatureType > 0)
             return ssEntry->creatureType;
+        else if (ChrRacesEntry const* raceEntry = sChrRacesStore.LookupEntry(GetRace()))
+            return raceEntry->creatureType;
         else
             return CREATURE_TYPE_HUMANOID;
     }
@@ -7732,8 +7736,8 @@ CharmInfo* Unit::InitCharmInfo(Unit* charm)
 
 CharmInfo::CharmInfo(Unit* unit)
     : m_unit(unit), m_originalFactionTemplate(nullptr), m_CommandState(COMMAND_FOLLOW), m_reactState(REACT_PASSIVE), m_petnumber(0),
-      _isCommandAttack(false), _isCommandFollow(false), _isAtStay(false), _isFollowing(false), _isReturning(false),
-      _stayX(0.0f), _stayY(0.0f), _stayZ(0.0f)
+      m_isCommandAttack(false), m_isCommandFollow(false), m_isAtStay(false), m_isFollowing(false), m_isReturning(false),
+      m_stayX(0.0f), m_stayY(0.0f), m_stayZ(0.0f)
 {
     for (auto& itr : m_charmspells)
         itr.SetActionAndType(0, ACT_DISABLED);
@@ -7834,7 +7838,7 @@ void CharmInfo::InitCharmCreateSpells()
 
             for (uint32 i = 0; i < 3 && onlyselfcast; ++i)  //nonexistent spell will not make any problems as onlyselfcast would be false -> break right away
             {
-                if (pSpellEntry->EffectImplicitTargetA[i] != TARGET_SELF && pSpellEntry->EffectImplicitTargetA[i] != 0)
+                if (pSpellEntry->EffectImplicitTargetA[i] != TARGET_UNIT_CASTER && pSpellEntry->EffectImplicitTargetA[i] != 0)
                     onlyselfcast = false;
             }
 
@@ -7961,73 +7965,73 @@ void CharmInfo::SetSpellAutocast(uint32 spell_id, bool state)
 
 void CharmInfo::SetIsCommandAttack(bool val)
 {
-    _isCommandAttack = val;
+    m_isCommandAttack = val;
 }
 
 bool CharmInfo::IsCommandAttack()
 {
-    return _isCommandAttack;
+    return m_isCommandAttack;
 }
 
 void CharmInfo::SetIsCommandFollow(bool val)
 {
-    _isCommandFollow = val;
+    m_isCommandFollow = val;
 }
 
 bool CharmInfo::IsCommandFollow()
 {
-    return _isCommandFollow;
+    return m_isCommandFollow;
 }
 
 void CharmInfo::SaveStayPosition()
 {
     // No Unit::StopMoving while possessed
     if (m_unit->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_POSSESSED))
-        m_unit->GetPosition(_stayX, _stayY, _stayZ);
+        m_unit->GetPosition(m_stayX, m_stayY, m_stayZ);
     else //! At this point a new spline destination is enabled because of Unit::StopMoving()
     {
         G3D::Vector3 stayPos = m_unit->movespline->FinalDestination();
-        _stayX = stayPos.x;
-        _stayY = stayPos.y;
-        _stayZ = stayPos.z;
+        m_stayX = stayPos.x;
+        m_stayY = stayPos.y;
+        m_stayZ = stayPos.z;
     }
 }
 
 void CharmInfo::GetStayPosition(float &x, float &y, float &z)
 {
-    x = _stayX;
-    y = _stayY;
-    z = _stayZ;
+    x = m_stayX;
+    y = m_stayY;
+    z = m_stayZ;
 }
 
 void CharmInfo::SetIsAtStay(bool val)
 {
-    _isAtStay = val;
+    m_isAtStay = val;
 }
 
 bool CharmInfo::IsAtStay()
 {
-    return _isAtStay;
+    return m_isAtStay;
 }
 
 void CharmInfo::SetIsFollowing(bool val)
 {
-    _isFollowing = val;
+    m_isFollowing = val;
 }
 
 bool CharmInfo::IsFollowing()
 {
-    return _isFollowing;
+    return m_isFollowing;
 }
 
 void CharmInfo::SetIsReturning(bool val)
 {
-    _isReturning = val;
+    m_isReturning = val;
 }
 
 bool CharmInfo::IsReturning()
 {
-    return _isReturning;
+    return m_isReturning;
 }
 
 uint32 createProcExtendMask(SpellNonMeleeDamage* damageInfo, SpellMissInfo missCondition)
@@ -8292,28 +8296,28 @@ void Unit::StopMoving(bool force)
     DisableSpline();
 }
 
-void Unit::SetFleeing(bool apply, ObjectGuid casterGuid, uint32 spellID, uint32 time)
+void Unit::SetFleeing(bool apply, ObjectGuid casterGuid, uint32 spellId, uint32 time)
 {
     if (apply && HasAuraType(SPELL_AURA_PREVENTS_FLEEING))
         return;
 
-    ModConfuseSpell(apply, casterGuid, spellID, MOV_MOD_FLEE_FOR_ASSISTANCE, time);
+    ModConfuseSpell(apply, casterGuid, spellId, MOV_MOD_FLEE_FOR_ASSISTANCE, time);
 }
 
-void Unit::SetFeared(bool apply, ObjectGuid casterGuid, uint32 spellID, uint32 time)
+void Unit::SetFeared(bool apply, ObjectGuid casterGuid, uint32 spellId, uint32 time)
 {
     if (apply && HasAuraType(SPELL_AURA_PREVENTS_FLEEING))
         return;
 
-    ModConfuseSpell(apply, casterGuid, spellID, MOV_MOD_FLEE_IN_FEAR, time);
+    ModConfuseSpell(apply, casterGuid, spellId, MOV_MOD_FLEE_IN_FEAR, time);
 }
 
-void Unit::SetConfused(bool apply, ObjectGuid casterGuid, uint32 spellID)
+void Unit::SetConfused(bool apply, ObjectGuid casterGuid, uint32 spellId)
 {
-    ModConfuseSpell(apply, casterGuid, spellID, MOV_MOD_CONFUSED, 0);
+    ModConfuseSpell(apply, casterGuid, spellId, MOV_MOD_CONFUSED, 0);
 }
 
-void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellID, MovementModType modType, uint32 time)
+void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellId, MovementModType modType, uint32 time)
 {
     if (Creature* pCreature = ToCreature())
         if (pCreature->IsTotem())
@@ -8341,7 +8345,7 @@ void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellID, Mo
 
     if (apply)
     {
-        CastStop(GetObjectGuid() == casterGuid ? spellID : 0);
+        CastStop(GetObjectGuid() == casterGuid ? spellId : 0);
 
         switch (modType)
         {
@@ -8387,9 +8391,9 @@ void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellID, Mo
             }
         }
 
-        // If spellID = 0, it is to interrupt (eg Curse of Recklessness - 704)
+        // If spellId = 0, it is to interrupt (eg Curse of Recklessness - 704)
         // So we remove the effects even if we still have an aura of fear.
-        if (!controlFinished && spellID)
+        if (!controlFinished && spellId)
             return;
 
         if (!IsPlayer() && IsAlive())
@@ -8642,6 +8646,15 @@ void Unit::UpdateReactives(uint32 p_time)
         else
             m_reactiveTimer[reactive] -= p_time;
     }
+}
+
+uint8 Unit::GetEnemyCountInRadiusAround(Unit* pTarget, float radius) const
+{
+    std::list<Unit*> targets;
+    MaNGOS::AnyUnfriendlyUnitInObjectRangeCheck u_check(pTarget, this, radius);
+    MaNGOS::UnitListSearcher<MaNGOS::AnyUnfriendlyUnitInObjectRangeCheck> searcher(targets, u_check);
+    Cell::VisitAllObjects(pTarget, searcher, radius);
+    return targets.size();
 }
 
 Unit* Unit::SelectRandomUnfriendlyTarget(Unit* except /*= nullptr*/, float radius /*= ATTACK_DISTANCE*/, bool inFront /*= false*/, bool isValidAttackTarget /*= false*/) const
@@ -9438,9 +9451,9 @@ void Unit::GetRandomAttackPoint(Unit const* attacker, float &x, float &y, float 
     float initialPosX, initialPosY, initialPosZ, o;
     GetPosition(initialPosX, initialPosY, initialPosZ);
 
-    // Moving player: try to interpolate movement a bit
+    // Moving player: try to extrapolate movement a bit
     if (IsPlayer() && IsMoving())
-        if (!ToPlayer()->GetCheatData()->InterpolateMovement(m_movementInfo, 200, initialPosX, initialPosY, initialPosZ, o))
+        if (!ToPlayer()->GetCheatData()->ExtrapolateMovement(m_movementInfo, 200, initialPosX, initialPosY, initialPosZ, o))
             GetPosition(initialPosX, initialPosY, initialPosZ);
 
     float attackerTargetDistance = sqrt(pow(initialPosX - attacker->GetPositionX(), 2) +
@@ -9610,6 +9623,9 @@ bool Unit::IsAttackableByAOE(bool requireDeadTarget, bool isCasterPlayer) const
     if (isCasterPlayer && HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER))
         return false;
 
+    if (!isCasterPlayer && HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC))
+        return false;
+
     if (Player const* pPlayer = ToPlayer())
         if (pPlayer->IsGameMaster())
             return false;
@@ -9631,23 +9647,13 @@ bool Unit::IsImmuneToSchoolMask(uint32 schoolMask) const
     return false;
 }
 
-void Unit::ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs)
+bool Unit::IsImmuneToMechanic(Mechanics mechanic) const
 {
-    // Still needed ... ?
-    ProhibitSpellInfo inf;
-    inf.SchoolMask = idSchoolMask;
-    inf.RestingMsTime = unTimeMs;
-    m_prohibitSpell.push_back(inf);
-}
-
-bool Unit::IsSpellProhibited(SpellEntry const* pSpell) const
-{
-    uint32 spellSchoolMask = pSpell->GetSpellSchoolMask();
-    for (const auto& it : m_prohibitSpell)
-    {
-        if (it.SchoolMask & spellSchoolMask)
+    SpellImmuneList const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
+    for (const auto& itr : mechanicList)
+        if (itr.type == mechanic)
             return true;
-    }
+
     return false;
 }
 
@@ -10087,37 +10093,6 @@ void Unit::RestoreMovement()
     }
 }
 
-/** Spell cooldown management system. Shared by Players, Creatures, Pets, ... */
-void Unit::RemoveSpellCooldown(uint32 spell_id, bool update /* = false */)
-{
-    m_spellCooldowns.erase(spell_id);
-
-    if (update)
-        if (Player* player = GetAffectingPlayer())
-            player->SendClearCooldown(spell_id, this);
-}
-
-bool Unit::HasSpellCategoryCooldown(uint32 cat) const
-{
-    if (!cat)
-        return false;
-    for (const auto& it : m_spellCooldowns)
-        if (it.second.cat == cat && it.second.categoryEnd > time(nullptr))
-            return true;
-    return false;
-}
-
-void Unit::RemoveAllSpellCooldown()
-{
-    if (!m_spellCooldowns.empty())
-    {
-        if (Player* pPlayer = GetAffectingPlayer())
-            pPlayer->SendClearAllCooldowns(this);
-
-        m_spellCooldowns.clear();
-    }
-}
-
 void Unit::SetTransformScale(float scale)
 {
     if (!scale)
@@ -10145,148 +10120,41 @@ void Unit::SetNativeScale(float scale)
     m_nativeScale = scale;
 }
 
-void Unit::CooldownEvent(SpellEntry const* spellInfo, uint32 itemId, Spell* spell)
-{
-    // start cooldowns at server side, if any
-    AddSpellAndCategoryCooldowns(spellInfo, itemId, spell);
-
-    // Send activate cooldown timer (possible 0) at client side
-    if (Player* player = GetAffectingPlayer())
-    {
-        WorldPacket data(SMSG_COOLDOWN_EVENT, (4 + 8));
-        data << uint32(spellInfo->Id);
-        data << GetObjectGuid();
-        player->SendDirectMessage(&data);
-    }
-}
-
-void Unit::AddSpellAndCategoryCooldowns(SpellEntry const* spellInfo, uint32 itemId, Spell* spell, bool infinityCooldown)
-{
-    // init cooldown values
-    uint32 cat   = 0;
-    int32 rec    = -1;
-    int32 catrec = -1;
-
-    // some special item spells without correct cooldown in SpellInfo
-    // cooldown information stored in item prototype
-    // This used in same way in WorldSession::HandleItemQuerySingleOpcode data sending to client.
-
-    if (itemId)
-    {
-        if (ItemPrototype const* proto = ObjectMgr::GetItemPrototype(itemId))
-        {
-            for (const auto& itr : proto->Spells)
-            {
-                if (itr.SpellId == spellInfo->Id)
-                {
-                    cat    = itr.SpellCategory;
-                    rec    = itr.SpellCooldown;
-                    catrec = itr.SpellCategoryCooldown;
-                    break;
-                }
-            }
-        }
-    }
-
-    // if no cooldown found above then base at DBC data
-    if (rec < 0 && catrec < 0)
-    {
-        cat = spellInfo->Category;
-        rec = spellInfo->RecoveryTime;
-        catrec = spellInfo->CategoryRecoveryTime;
-    }
-
-    time_t curTime = time(nullptr);
-
-    time_t catrecTime;
-    time_t recTime;
-
-    // overwrite time for selected category
-    if (infinityCooldown)
-    {
-        // use +MONTH as infinity mark for spell cooldown (will checked as MONTH/2 at save ans skipped)
-        // but not allow ignore until reset or re-login
-        catrecTime = catrec > 0 ? curTime + infinityCooldownDelay : 0;
-        recTime    = rec    > 0 ? curTime + infinityCooldownDelay : catrecTime;
-    }
-    else
-    {
-        // shoot spells used equipped item cooldown values already assigned in GetAttackTime(RANGED_ATTACK)
-        // prevent 0 cooldowns set by another way
-        if (rec <= 0 && catrec <= 0 && (cat == 76 || cat == 351))
-            rec = GetAttackTime(RANGED_ATTACK);
-
-        if (rec > 0 || catrec > 0)
-        {
-            if (Player* modOwner = GetSpellModOwner())
-            {
-                // Now we have cooldown data (if found any), time to apply mods
-                if (rec > 0)
-                    modOwner->ApplySpellMod(spellInfo->Id, SPELLMOD_COOLDOWN, rec, spell);
-
-                if (catrec > 0)
-                    modOwner->ApplySpellMod(spellInfo->Id, SPELLMOD_COOLDOWN, catrec, spell);
-            }
-            if (Player* player = GetAffectingPlayer())
-                if (player != this)
-                    player->SendSpellCooldown(spellInfo->Id, rec > catrec ? rec : catrec, GetObjectGuid());
-        }
-
-        // replace negative cooldowns by 0
-        if (rec < 0) rec = 0;
-        if (catrec < 0) catrec = 0;
-
-        // Hackfix: minimum cooldown for controlled creatures
-        if (!rec && !catrec && IsCreature() && GetCharmerGuid().IsPlayer())
-            rec = 1500; // Global cooldown
-
-        // no cooldown after applying spell mods
-        if (rec == 0 && catrec == 0)
-            return;
-
-        catrecTime = catrec ? curTime + catrec / IN_MILLISECONDS : 0;
-        recTime    = rec ? curTime + rec / IN_MILLISECONDS : catrecTime;
-    }
-
-    // self spell cooldown
-    if (recTime > 0)
-        AddSpellCooldown(spellInfo->Id, itemId, recTime, catrecTime, cat);
-}
-
-void Unit::AddSpellCooldown(uint32 spellid, uint32 itemid, time_t endTime, time_t categoryEndTime, uint32 cat)
-{
-    // Do not replace longer cooldown
-    SpellCooldowns::iterator it = m_spellCooldowns.find(spellid);
-    if (it != m_spellCooldowns.end())
-    {
-        it->second.end = endTime;
-        it->second.categoryEnd = categoryEndTime;
-        return;
-    }
-    SpellCooldown sc;
-    sc.end = endTime;
-    sc.categoryEnd = categoryEndTime;
-    sc.itemid = itemid;
-    sc.cat = cat;
-    m_spellCooldowns[spellid] = sc;
-}
-
 void Unit::WritePetSpellsCooldown(WorldPacket& data) const
 {
-    uint8 cooldownsCount = GetSpellCooldownMap().size();
-    data << uint8(cooldownsCount);
+    // write cooldown data
+    uint32 cdCount = 0;
+    const size_t cdCountPos = data.wpos();
+    data << uint16(0);
+    auto currTime = sWorld.GetCurrentClockTime();
 
-    time_t curTime = time(nullptr);
-
-    for (const auto& itr : GetSpellCooldownMap())
+    for (auto& cdItr : m_cooldownMap)
     {
-        //time_t cooldown = (itr->second > curTime) ? (itr->second - curTime) * IN_MILLISECONDS : 0;
+        auto& cdData = cdItr.second;
+        TimePoint spellRecTime = currTime;
+        TimePoint catRecTime = currTime;
+        cdData->GetSpellCDExpireTime(spellRecTime);
+        cdData->GetCatCDExpireTime(catRecTime);
+        uint32 spellCDDuration = 0;
+        uint32 catCDDuration = 0;
+        if (spellRecTime > currTime)
+            spellCDDuration = std::chrono::duration_cast<std::chrono::milliseconds>(spellRecTime - currTime).count();
+        if (catRecTime > currTime)
+            catCDDuration = std::chrono::duration_cast<std::chrono::milliseconds>(catRecTime - currTime).count();
 
-        data << uint16(itr.first);                                                              // spellid
-        data << uint16(0);                                                                      // spell category?
-        data << uint32(IN_MILLISECONDS * (itr.second.end - curTime));                           // cooldown
-        data << uint32(0);                  // category cooldown
+        if (!spellCDDuration && !catCDDuration && !cdData->IsPermanent())
+            continue;
+
+        if (cdData->IsPermanent())
+            catCDDuration |= 0x8000000;
+
+        data << uint32(cdData->GetSpellId());
+        data << uint16(cdData->GetCategory());              // spell category
+        data << uint32(spellCDDuration);                    // cooldown
+        data << uint32(catCDDuration);                      // category cooldown
+        ++cdCount;
     }
+    data.put<uint16>(cdCountPos, cdCount);
 }
 
 void Unit::InitPlayerDisplayIds()

@@ -182,19 +182,19 @@ void PetAI::UpdateAI(uint32 const diff)
 
         for (uint8 i = 0; i < m_creature->GetPetAutoSpellSize(); ++i)
         {
-            uint32 spellID = m_creature->GetPetAutoSpellOnPos(i);
-            if (!spellID)
+            uint32 spellId = m_creature->GetPetAutoSpellOnPos(i);
+            if (!spellId)
                 continue;
 
-            SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellID);
+            SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellId);
             if (!spellInfo)
                 continue;
 
-            if (m_creature->GetGlobalCooldownMgr().HasGlobalCooldown(spellInfo))
+            if (m_creature->HasGCD(spellInfo))
                 continue;
 
             // check spell cooldown
-            if (m_creature->HasSpellCooldown(spellInfo->Id))
+            if (!m_creature->IsSpellReady(spellInfo->Id))
                 continue;
 
             if (spellInfo->IsPositiveSpell())
@@ -569,7 +569,8 @@ void PetAI::HandleReturnMovement()
             ClearCharmInfoFlags();
             m_creature->GetCharmInfo()->SetIsReturning(true);
             m_creature->GetMotionMaster()->Clear(false);
-            m_creature->GetMotionMaster()->MoveFollow(m_creature->GetCharmerOrOwner(), PET_FOLLOW_DIST, PET_FOLLOW_ANGLE);
+            m_creature->GetMotionMaster()->MoveFollow(m_creature->GetCharmerOrOwner(), PET_FOLLOW_DIST,
+                                                      m_creature->IsPet() && static_cast<Pet*>(m_creature)->getPetType() == MINI_PET ? MINI_PET_FOLLOW_ANGLE : PET_FOLLOW_ANGLE);
         }
     }
 }

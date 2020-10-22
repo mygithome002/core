@@ -54,8 +54,9 @@ GameObject::GameObject() : WorldObject(),
 {
     m_objectType |= TYPEMASK_GAMEOBJECT;
     m_objectTypeId = TYPEID_GAMEOBJECT;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
     m_updateFlag = (UPDATEFLAG_ALL | UPDATEFLAG_HAS_POSITION);
-
+#endif
     m_valuesCount = GAMEOBJECT_END;
     m_respawnTime = 0;
     m_respawnDelayTime = 25;
@@ -270,6 +271,8 @@ void GameObject::Update(uint32 update_diff, uint32 /*p_time*/)
         //((Transport*)this)->Update(p_time);
         return;
     }
+
+    UpdateCooldowns(sWorld.GetCurrentClockTime());
 
     m_Events.Update(update_diff);
 
@@ -489,12 +492,15 @@ void GameObject::Update(uint32 update_diff, uint32 /*p_time*/)
                         // Some may have have animation and/or are expected to despawn.
                         switch (GetDisplayId())
                         {
-                            case 3073:
-                            case 4392:
-                            case 4472:
-                            case 4491:
-                            case 6785:
-                            case 6747: //sapphiron birth
+                            case 3071: // freezing trap
+                            case 3072: // explosive trap
+                            case 3073: // frost trap, fixed trap
+                            case 3074: // immolation trap
+                            case 4392: // lava fissure
+                            case 4472: // lava fissure
+                            case 4491: // mortar in dun morogh
+                            case 6785: // plague fissure
+                            case 6747: // sapphiron birth
                                 SendGameObjectCustomAnim();
                                 break;
                         }
@@ -516,19 +522,11 @@ void GameObject::Update(uint32 update_diff, uint32 /*p_time*/)
         {
             switch (GetGoType())
             {
-                case GAMEOBJECT_TYPE_DOOR: // Ustaag <Nostalrius>
-                {
-                    if ((m_cooldownTime < time(nullptr)) && (GetGOInfo()->GetAutoCloseTime() != 0))
-                        ResetDoorOrButton();
-                    break;
-                }
+                case GAMEOBJECT_TYPE_DOOR:
                 case GAMEOBJECT_TYPE_BUTTON:
-                {
-                    if ((m_cooldownTime < time(nullptr)) && (GetGOInfo()->GetAutoCloseTime() != 0))  // Ustaag <Nostalrius>
-                        //if (m_respawnDelayTime && (m_cooldownTime < time(nullptr)))
+                    if (GetGOInfo()->GetAutoCloseTime() && (m_cooldownTime < time(nullptr)))
                         ResetDoorOrButton();
                     break;
-                }
                 case GAMEOBJECT_TYPE_GOOBER:
                     if (m_cooldownTime < time(nullptr))
                     {
@@ -731,7 +729,7 @@ void GameObject::FinishRitual()
         // take spell cooldown
         if (GetOwner() && GetOwner()->IsPlayer())
             if (SpellEntry const* createBySpell = sSpellMgr.GetSpellEntry(GetSpellId()))
-                GetOwner()->CooldownEvent(createBySpell);
+                GetOwner()->AddCooldown(*createBySpell);
         if (!info->summoningRitual.ritualPersistent)
             SetLootState(GO_JUST_DEACTIVATED);
         // Only ritual of doom deals a second spell
@@ -776,13 +774,13 @@ void GameObject::CleanupsBeforeDelete()
 
 void GameObject::Delete()
 {
-    if (!IsDeleted())
-        AddObjectToRemoveList();
-
     // no despawn animation for not activated rituals
     if (GetGoType() != GAMEOBJECT_TYPE_SUMMONING_RITUAL ||
         GetGoState() == GO_STATE_ACTIVE)
         SendObjectDeSpawnAnim(GetObjectGuid());
+
+    if (!IsDeleted())
+        AddObjectToRemoveList();
 
     SetGoState(GO_STATE_READY);
     SetUInt32Value(GAMEOBJECT_FLAGS, GetGOInfo()->flags);
@@ -1160,7 +1158,7 @@ bool GameObject::ActivateToQuest(Player* pTarget) const
         }
         case GAMEOBJECT_TYPE_GOOBER:
         {
-            if (pTarget->GetQuestStatus(GetGOInfo()->goober.questId) == QUEST_STATUS_INCOMPLETE)
+            if (GetGOInfo()->goober.questId == -1 || pTarget->GetQuestStatus(GetGOInfo()->goober.questId) == QUEST_STATUS_INCOMPLETE)
                 return true;
             break;
         }
@@ -1390,6 +1388,7 @@ void GameObject::Use(Unit* user)
             if (user->GetTypeId() != TYPEID_PLAYER)
                 return;
 
+            GetMap()->ScriptsStart(sGameObjectScripts, GetGUIDLow(), user, this);
             TriggerLinkedGameObject(user);
             return;
         }
@@ -1519,7 +1518,7 @@ void GameObject::Use(Unit* user)
                 }
 
                 // possible quest objective for active quests
-                if (info->goober.questId && sObjectMgr.GetQuestTemplate(info->goober.questId))
+                if (info->goober.questId > 0 && sObjectMgr.GetQuestTemplate(info->goober.questId))
                 {
                     //Quest require to be active for GO using
                     if (player->GetQuestStatus(info->goober.questId) != QUEST_STATUS_INCOMPLETE)
@@ -1533,9 +1532,11 @@ void GameObject::Use(Unit* user)
                     if (!sScriptMgr.OnProcessEvent(info->goober.eventId, player, this, true))
                         GetMap()->ScriptsStart(sEventScripts, info->goober.eventId, player, this);
                 }
+                else
+                    GetMap()->ScriptsStart(sGameObjectScripts, GetGUIDLow(), user, this);
 
                 // possible quest objective for active quests
-                if (info->goober.questId && sObjectMgr.GetQuestTemplate(info->goober.questId))
+                if (info->goober.questId > 0 && sObjectMgr.GetQuestTemplate(info->goober.questId))
                 {
                     //Quest require to be active for GO using
                     if (player->GetQuestStatus(info->goober.questId) != QUEST_STATUS_INCOMPLETE)
@@ -1834,6 +1835,7 @@ void GameObject::Use(Unit* user)
             player->SendLoot(GetObjectGuid(), LOOT_FISHINGHOLE);
             return;
         }
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
         case GAMEOBJECT_TYPE_FLAGDROP:                      // 26
         {
             if (user->GetTypeId() != TYPEID_PLAYER)
@@ -1843,38 +1845,21 @@ void GameObject::Use(Unit* user)
 
             if (player->CanUseBattleGroundObject())
             {
-                // in battleground check
-                BattleGround* bg = player->GetBattleGround();
-                if (!bg)
-                    return;
-                // BG flag dropped
-                // WS:
-                // 179785 - Silverwing Flag
-                // 179786 - Warsong Flag
                 GameObjectInfo const* info = GetGOInfo();
-                if (info)
+                if (info && info->flagdrop.eventID)
                 {
-                    switch (info->id)
-                    {
-                        case 179785:                        // Silverwing Flag
-                            // check if it's correct bg
-                            if (bg->GetTypeID() == BATTLEGROUND_WS)
-                                bg->EventPlayerClickedOnFlag(player, this);
-                            break;
-                        case 179786:                        // Warsong Flag
-                            if (bg->GetTypeID() == BATTLEGROUND_WS)
-                                bg->EventPlayerClickedOnFlag(player, this);
-                            break;
-                    }
+                    DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "FlagDrop ScriptStart id %u for GO entry %u (GUID %u).", info->flagdrop.eventID, GetEntry(), GetGUIDLow());
+
+                    if (!sScriptMgr.OnProcessEvent(info->flagdrop.eventID, player, this, true))
+                        GetMap()->ScriptsStart(sEventScripts, info->flagdrop.eventID, player, this);
                 }
-                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH);
-                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_INVISIBILITY);
-                //this cause to call return, all flags must be deleted here!!
-                spellId = 0;
-                Delete();
+                
+                spellId = info->flagdrop.pickupSpell;
             }
             break;
         }
+#endif
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_11_2
         case GAMEOBJECT_TYPE_CAPTURE_POINT:                 // 29
         {
             // Code here is not even halfway complete, and only added for further development.
@@ -1948,6 +1933,7 @@ void GameObject::Use(Unit* user)
             // Some has spell, need to process those further.
             return;
         }
+#endif
         default:
             sLog.outError("GameObject::Use unhandled GameObject type %u (entry %u).", GetGoType(), GetEntry());
             break;

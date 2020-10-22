@@ -62,7 +62,7 @@ enum eScriptCommand
                                                             // datalong = chat_type (see enum ChatType)
                                                             // dataint = broadcast_text id. dataint2-4 optional for random selected text.
     SCRIPT_COMMAND_EMOTE                    = 1,            // source = Unit
-                                                            // datalong = emote_id
+                                                            // datalong1-4 = emote_id
     SCRIPT_COMMAND_FIELD_SET                = 2,            // source = Object
                                                             // datalong = field_id
                                                             // datalong2 = value
@@ -329,6 +329,19 @@ enum eScriptCommand
     SCRIPT_COMMAND_LEAVE_CREATURE_GROUP     = 79,           // source = Creature
     SCRIPT_COMMAND_SET_GO_STATE             = 80,           // source = GameObject
                                                             // datalong = GOState
+    SCRIPT_COMMAND_DESPAWN_GAMEOBJECT       = 81,           // source = GameObject (from datalong, provided source or target)
+                                                            // datalong = db_guid
+                                                            // datalong2 = despawn_delay
+    SCRIPT_COMMAND_LOAD_GAMEOBJECT          = 82,           // source = Map
+                                                            // datalong = db_guid
+    SCRIPT_COMMAND_QUEST_CREDIT             = 83,           // source = Player (from provided source or target)
+                                                            // target = WorldObject (from provided source or target)
+    SCRIPT_COMMAND_SET_GOSSIP_MENU          = 84,           // source = Creature
+                                                            // datalong = gossip_menu_id
+    SCRIPT_COMMAND_SEND_SCRIPT_EVENT        = 85,           // source = Creature
+                                                            // target = WorldObject
+                                                            // datalong = event_id
+                                                            // datalong2 = event_data
     SCRIPT_COMMAND_MAX,
 
     SCRIPT_COMMAND_DISABLED                 = 9999          // Script action was disabled during loading.
@@ -515,12 +528,7 @@ struct ScriptInfo
 
         struct                                              // SCRIPT_COMMAND_EMOTE (1)
         {
-            uint32 emoteId;                                 // datalong
-            uint32 unused1;                                 // datalong2
-            uint32 unused2;                                 // datalong3
-            uint32 unused3;                                 // datalong4
-            uint32 unused4;                                 // data_flags
-            uint32 randomEmotes[MAX_EMOTE_ID];              // dataint to dataint4
+            uint32 emoteId[MAX_EMOTE_ID];                   // datalong to datalong4
         } emote;
 
         struct                                              // SCRIPT_COMMAND_FIELD_SET (2)
@@ -997,6 +1005,30 @@ struct ScriptInfo
             uint32 state;                                   // datalong
         } setGoState;
 
+        struct                                              // SCRIPT_COMMAND_DESPAWN_GAMEOBJECT (81)
+        {
+            uint32 goGuid;                                  // datalong
+            uint32 respawnDelay;                            // datalong2
+        } despawnGo;
+
+        struct                                              // SCRIPT_COMMAND_LOAD_GAMEOBJECT (82)
+        {
+            uint32 goGuid;                                  // datalong
+        } loadGo;
+
+                                                            // SCRIPT_COMMAND_QUEST_CREDIT (83)
+
+        struct                                              // SCRIPT_COMMAND_SET_GOSSIP_MENU (84)
+        {
+            uint32 gossipMenuId;                            // datalong
+        } setGossipMenu;
+
+        struct                                              // SCRIPT_COMMAND_SEND_SCRIPT_EVENT (85)
+        {
+            uint32 eventId;                                 // datalong
+            uint32 eventData;                               // datalong2
+        } sendScriptEvent;
+
         struct
         {
             uint32 data[9];
@@ -1023,6 +1055,8 @@ struct ScriptInfo
         switch(command)
         {
             case SCRIPT_COMMAND_RESPAWN_GAMEOBJECT: return respawnGo.goGuid;
+            case SCRIPT_COMMAND_DESPAWN_GAMEOBJECT: return despawnGo.goGuid;
+            case SCRIPT_COMMAND_LOAD_GAMEOBJECT: return loadGo.goGuid;
             case SCRIPT_COMMAND_OPEN_DOOR: return openDoor.goGuid;
             case SCRIPT_COMMAND_CLOSE_DOOR: return closeDoor.goGuid;
             default: return 0;
@@ -1053,6 +1087,7 @@ extern ScriptMapMap sSpellScripts;
 extern ScriptMapMap sCreatureSpellScripts;
 extern ScriptMapMap sGameObjectScripts;
 extern ScriptMapMap sEventScripts;
+extern ScriptMapMap sGenericScripts;
 extern ScriptMapMap sGossipScripts;
 extern ScriptMapMap sCreatureMovementScripts;
 extern ScriptMapMap sCreatureAIScripts;
@@ -1098,7 +1133,7 @@ enum ScriptTarget
     TARGET_T_OWNER                          = 7,            //The owner of the source.
     
 
-    TARGET_T_CREATURE_WITH_ENTRY            = 8,            //Searches for nearby creature with the given entry.
+    TARGET_T_CREATURE_WITH_ENTRY            = 8,            //Searches for closest nearby creature with the given entry.
                                                             //Param1 = creature_entry
                                                             //Param2 = search_radius
 
@@ -1108,7 +1143,7 @@ enum ScriptTarget
     TARGET_T_CREATURE_FROM_INSTANCE_DATA    = 10,           //Find creature by guid stored in instance data.
                                                             //Param1 = instance_data_field
 
-    TARGET_T_GAMEOBJECT_WITH_ENTRY          = 11,           //Searches for nearby gameobject with the given entry.
+    TARGET_T_GAMEOBJECT_WITH_ENTRY          = 11,           //Searches for closest nearby gameobject with the given entry.
                                                             //Param1 = gameobject_entry
                                                             //Param2 = search_radius
 
@@ -1148,7 +1183,9 @@ enum ScriptTarget
                                                             //Param1 = search-radius
     TARGET_T_NEAREST_FRIENDLY_PLAYER        = 25,           //Nearest friendly player within range.
                                                             //Param1 = search-radius
-
+    TARGET_T_RANDOM_CREATURE_WITH_ENTRY     = 26,           //Searches for random nearby creature with the given entry. Not Self.
+                                                            //Param1 = creature_entry
+                                                            //Param2 = search_radius
     TARGET_T_END
 };
 
@@ -1270,6 +1307,7 @@ class ScriptMgr
         void LoadEventScripts();
         void LoadSpellScripts();
         void LoadCreatureSpellScripts();
+        void LoadGenericScripts();
         void LoadGossipScripts();
         void LoadCreatureMovementScripts();
         void LoadCreatureEventAIScripts();
@@ -1356,6 +1394,7 @@ class ScriptMgr
 
     private:
         void CollectPossibleEventIds(std::set<uint32>& eventIds);
+        void CollectPossibleGenericIds(std::set<uint32>& eventIds);
         void LoadScripts(ScriptMapMap& scripts, char const* tablename);
         void CheckScriptTexts(ScriptMapMap const& scripts);
 
@@ -1383,10 +1422,10 @@ class ScriptMgr
 
 #define sScriptMgr MaNGOS::Singleton<ScriptMgr>::Instance()
 
-MANGOS_DLL_SPEC uint32 GetAreaTriggerScriptId(uint32 triggerId);
-MANGOS_DLL_SPEC uint32 GetEventIdScriptId(uint32 eventId);
-MANGOS_DLL_SPEC uint32 GetScriptId(char const* name);
-MANGOS_DLL_SPEC char const* GetScriptName(uint32 id);
-MANGOS_DLL_SPEC uint32 GetScriptIdsCount();
+uint32 GetAreaTriggerScriptId(uint32 triggerId);
+uint32 GetEventIdScriptId(uint32 eventId);
+uint32 GetScriptId(char const* name);
+char const* GetScriptName(uint32 id);
+uint32 GetScriptIdsCount();
 
 #endif

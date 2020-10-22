@@ -63,7 +63,7 @@ struct CreatureAISpellsEntry : CreatureSpellsEntry
     CreatureAISpellsEntry(CreatureSpellsEntry const& EntryStruct) : CreatureSpellsEntry(EntryStruct), cooldown(urand(EntryStruct.delayInitialMin, EntryStruct.delayInitialMax)) {}
 };
 
-class MANGOS_DLL_SPEC CreatureAI
+class CreatureAI
 {
     public:
         explicit CreatureAI(Creature* creature) : m_creature(creature), m_bUseAiAtControl(false), m_bMeleeAttack(true), m_bCombatMovement(true), m_uiCastingDelay(0), m_uLastAlertTime(0)
@@ -172,8 +172,8 @@ class MANGOS_DLL_SPEC CreatureAI
         // Like UpdateAI, but only when the creature is a dead corpse
         virtual void UpdateAI_corpse(uint32 const /*uiDiff*/) {}
 
-        // Called by scripted map events
-        virtual void MapScriptEventHappened(ScriptedEvent* /*pEvent*/, uint32 /*uiData*/) {};
+        // Called by another script
+        virtual void OnScriptEventHappened(uint32 /*uiEvent*/, uint32 /*uiData*/, WorldObject* /*pInvoker*/) {};
 
         ///== State checks =================================
 

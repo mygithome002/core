@@ -135,13 +135,15 @@ extern uint32 const LevelStartLoyalty[6];
 
 #define ACTIVE_SPELLS_MAX           4
 
-#define PET_FOLLOW_DIST  1.0f
+#define PET_FOLLOW_DIST 2.0f
 #define PET_FOLLOW_ANGLE (M_PI_F/2.0f)
+#define MINI_PET_FOLLOW_ANGLE (M_PI_F)
+#define MINI_PET_SUMMON_ANGLE (M_PI_F/4.0f)
 
 class Player;
 struct CharacterPetCache;
 
-class MANGOS_DLL_SPEC Pet : public Creature
+class Pet : public Creature
 {
     public:
         explicit Pet(PetType type = MAX_PET_TYPE);
@@ -221,7 +223,6 @@ class MANGOS_DLL_SPEC Pet : public Creature
         void CastPetAuras(bool current);
         void CastPetAura(PetAura const* aura);
 
-        void ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs) override;
         void _LoadSpellCooldowns();
         void _SaveSpellCooldowns();
         void _LoadAuras(uint32 timediff);

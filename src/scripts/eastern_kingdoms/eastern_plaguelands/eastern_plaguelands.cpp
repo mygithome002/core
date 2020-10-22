@@ -23,90 +23,13 @@ EndScriptData */
 
 /* ContentData
 mobs_ghoul_flayer
-npc_darrowshire_spirit
-npc_tirion_fordring
 EndContentData */
 
 #include "scriptPCH.h"
 
-
-/*######
-## npc_darrowshire_spirit
-######*/
-
-#define SPELL_SPIRIT_SPAWNIN    17321
-
-struct npc_darrowshire_spiritAI : public ScriptedAI
-{
-    npc_darrowshire_spiritAI(Creature* pCreature) : ScriptedAI(pCreature)
-    {
-        Reset();
-    }
-
-    void Reset() override
-    {
-        DoCastSpellIfCan(m_creature, SPELL_SPIRIT_SPAWNIN);
-        m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-    }
-};
-
-CreatureAI* GetAI_npc_darrowshire_spirit(Creature* pCreature)
-{
-    return new npc_darrowshire_spiritAI(pCreature);
-}
-
-bool GossipHello_npc_darrowshire_spirit(Player* pPlayer, Creature* pCreature)
-{
-    pPlayer->SEND_GOSSIP_MENU(3873, pCreature->GetGUID());
-    pPlayer->TalkedToCreature(pCreature->GetEntry(), pCreature->GetGUID());
-    pCreature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-    return true;
-}
-
-/*######
-## npc_tirion_fordring
-######*/
-
-bool GossipHello_npc_tirion_fordring(Player* pPlayer, Creature* pCreature)
-{
-    if (pCreature->IsQuestGiver())
-        pPlayer->PrepareQuestMenu(pCreature->GetGUID());
-
-    if (pPlayer->GetQuestStatus(5742) == QUEST_STATUS_INCOMPLETE && pPlayer->GetStandState() == UNIT_STAND_STATE_SIT)
-        pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I am ready to hear your tale, Tirion.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-
-    pPlayer->SEND_GOSSIP_MENU(pPlayer->GetGossipTextId(pCreature), pCreature->GetGUID());
-
-    return true;
-}
-
-bool GossipSelect_npc_tirion_fordring(Player* pPlayer, Creature* pCreature, uint32 uiSender, uint32 uiAction)
-{
-    switch (uiAction)
-    {
-        case GOSSIP_ACTION_INFO_DEF+1:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Thank you, Tirion.  What of your identity?", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-            pPlayer->SEND_GOSSIP_MENU(4493, pCreature->GetGUID());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+2:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "That is terrible.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-            pPlayer->SEND_GOSSIP_MENU(4494, pCreature->GetGUID());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+3:
-            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I will, Tirion.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
-            pPlayer->SEND_GOSSIP_MENU(4495, pCreature->GetGUID());
-            break;
-        case GOSSIP_ACTION_INFO_DEF+4:
-            pPlayer->CLOSE_GOSSIP_MENU();
-            pPlayer->AreaExploredOrEventHappens(5742);
-            break;
-    }
-    return true;
-}
-
 // Eris Havenfire event
 
-enum
+enum ErisHavenfireData
 {
     NPC_PAYSANT_0           = 14484,        // BLESSE
     NPC_PAYSANT_1           = 14485,        // CONTAMINE
@@ -115,7 +38,13 @@ enum
     NPC_CLEANER             = 14503,
 
     GO_LIGHT                = 179693,
-    GO_SLAIN_PEASANT        = 179695,
+    GO_DEATH_POST           = 179694,
+    GO_SLAIN_PEASANT1       = 179695,
+    GO_SLAIN_PEASANT2       = 179696,
+    GO_SLAIN_PEASANT3       = 179698,
+    GO_SLAIN_PEASANT4       = 179699,
+
+    DEATH_POST_SPAWNS_COUNT = 14,
 
     SPELL_PESTE             = 23072,
     SPELL_TIR_FLECHE        = 22121,
@@ -126,21 +55,21 @@ enum
     SPELL_FUFU              = 23196,
     SPELL_SEE               = 23199,        // Pas sur de son utilité
 
-    SAY_PEASANT_RANDOM_3    = -1900118,
-    SAY_PEASANT_RANDOM_2    = -1900119,
-    SAY_PEASANT_RANDOM_1    = -1900120,
-    SAY_PEASANT_END_4       = -1900121,
-    SAY_PEASANT_END_3       = -1900122,
-    SAY_PEASANT_END_2       = -1900123,
-    SAY_PEASANT_END_1       = -1900124,
-    SAY_ERIS_FAIL_1         = -1900125,
-    SAY_ERIS_FAIL_2         = -1900126,
-    SAY_PEASANT_SPAWN_1     = -1900127,
-    SAY_PEASANT_SPAWN_2     = -1900128,
-    SAY_PEASANT_SPAWN_3     = -1900129,
-    SAY_PEASANT_SPAWN_4     = -1900130,
-    SAY_ERIS_END            = -1900131,
-    SAY_ERIS_HEAL           = -1900132,
+    SAY_PEASANT_RANDOM_3    = 9683,
+    SAY_PEASANT_RANDOM_2    = 9680,
+    SAY_PEASANT_RANDOM_1    = 9682,
+    SAY_PEASANT_END_4       = 9653,
+    SAY_PEASANT_END_3       = 9650,
+    SAY_PEASANT_END_2       = 9652,
+    SAY_PEASANT_END_1       = 9654,
+    SAY_ERIS_FAIL_1         = 9648,
+    SAY_ERIS_FAIL_2         = 9649,
+    SAY_PEASANT_SPAWN_1     = 9712,
+    SAY_PEASANT_SPAWN_2     = 9713,
+    SAY_PEASANT_SPAWN_3     = 9714,
+    SAY_PEASANT_SPAWN_4     = 9715,
+    SAY_ERIS_END            = 9728,
+    SAY_ERIS_HEAL           = 9655,
 
     QUEST_BALANCE_OF_LIGHT  = 7622,
 
@@ -188,6 +117,39 @@ static ErisHavenfireMove ErisHavenfireEvent[] =
     {3358.7299f, -3075.9846f, 174.794f, 1.575f}         // Archer 7
 };
 
+struct DeathPostSpawn
+{
+    DeathPostSpawn(uint32 entry_, float x_, float y_, float z_, float o_, float rot0_, float rot1_, float rot2_, float rot3_) :
+        entry(entry_), x(x_), y(y_), z(z_), o(o_), rot0(rot0_), rot1(rot1_), rot2(rot2_), rot3(rot3_) {}
+    uint32 entry;
+    float x;
+    float y;
+    float z;
+    float o;
+    float rot0;
+    float rot1;
+    float rot2;
+    float rot3;
+};
+
+static DeathPostSpawn deathPostSpawnPositions[DEATH_POST_SPAWNS_COUNT] =
+{
+    { GO_DEATH_POST,     3355.48f, -3010.68f, 175.212f, 5.06146f, 0.0f, 0.0f, -0.573576f, 0.819152f },
+    { GO_SLAIN_PEASANT3, 3352.82f, -3007.79f, 177.409f, 2.53072f, 0.0f, 0.0f, 0.953716f, 0.300708f },
+    { GO_SLAIN_PEASANT1, 3353.07f, -3009.16f, 176.615f, 3.01941f, 0.0f, 0.0f, 0.998135f, 0.0610518f },
+    { GO_SLAIN_PEASANT4, 3354.08f, -3010.35f, 172.769f, 2.46091f, 0.0f, 0.0f, 0.942641f, 0.333808f },
+    { GO_SLAIN_PEASANT2, 3353.87f, -3007.88f, 171.79f, 5.18363f, 0.0f, 0.0f, -0.522498f, 0.852641f },
+    { GO_SLAIN_PEASANT2, 3353.28f, -3013.75f, 173.584f, 1.20428f, 0.0f, 0.0f, 0.566406f, 0.824126f },
+    { GO_SLAIN_PEASANT2, 3353.34f, -3009.84f, 173.532f, 1.98967f, 0.0f, 0.0f, 0.83867f, 0.54464f },
+    { GO_SLAIN_PEASANT3, 3353.8f, -3009.6f, 175.499f, 0.802851f, 0.0f, 0.0f, 0.390731f, 0.920505f },
+    { GO_SLAIN_PEASANT4, 3355.88f, -3014.61f, 173.609f, 5.58505f, 0.0f, 0.0f, -0.34202f, 0.939693f },
+    { GO_SLAIN_PEASANT4, 3354.33f, -3012.57f, 173.045f, 5.06146f, 0.0f, 0.0f, -0.573576f, 0.819152f },
+    { GO_SLAIN_PEASANT2, 3354.29f, -3011.48f, 171.916f, 2.80997f, 0.0f, 0.0f, 0.986285f, 0.16505f },
+    { GO_SLAIN_PEASANT1, 3354.74f, -3013.16f, 176.816f, 2.61799f, 0.0f, 0.0f, 0.965925f, 0.258821f },
+    { GO_SLAIN_PEASANT3, 3355.1f, -3013.5f, 176.482f, 0.139625f, 0.0f, 0.0f, 0.0697555f, 0.997564f },
+    { GO_SLAIN_PEASANT4, 3351.66f, -3007.61f, 175.0f, 4.53786f, 0.0f, 0.0f, -0.766044f, 0.642789f },
+};
+
 struct npc_eris_havenfireAI : public ScriptedAI
 {
     explicit npc_eris_havenfireAI(Creature* pCreature) : ScriptedAI(pCreature)
@@ -201,24 +163,26 @@ struct npc_eris_havenfireAI : public ScriptedAI
     uint32 Timer[2];
     uint32 BuffTimer;
     uint32 TimerArcher[8];
-    uint32 VillageoisMorts;
-    uint32 VillageoisPasses;
-    uint64 JoueurGUID;
+    uint32 VillagerDiedCount;
+    uint32 VillagerSurvivedCount;
+    uint64 PlayerGUID;
     uint64 ArchersGUIDs[8];
-    uint64 VillageoisGUIDs[50];
+    uint64 VillagerGUIDs[50];
+    uint64 DeathPostGUIDs[DEATH_POST_SPAWNS_COUNT];
+
     bool BeginQuete;
     bool CleanerSpawn;
 
     Player* GetPlayer()
     {
-        return me->GetMap()->GetPlayer(JoueurGUID);
+        return me->GetMap()->GetPlayer(PlayerGUID);
     }
 
     void Reset() override
     {
         Vague = 0;
-        VillageoisMorts = 0;
-        VillageoisPasses = 0;
+        VillagerDiedCount = 0;
+        VillagerSurvivedCount = 0;
         BeginQuete = false;
         CleanerSpawn = false;
 
@@ -230,17 +194,19 @@ struct npc_eris_havenfireAI : public ScriptedAI
             TimerArcher[i] = 5000;
             ArchersGUIDs[i] = 0;
         }
-        for (uint64 & guid : VillageoisGUIDs)
+        for (uint64 & guid : VillagerGUIDs)
+            guid = 0;
+        for (uint64 & guid : DeathPostGUIDs)
             guid = 0;
     }
 
-    void AttackedBy(Unit* /*Attacker*/) override {}
+    void AttackedBy(Unit* /*Attacker*/) override { }
 
     void MoveInLineOfSight(Unit* who) override
     {
         if ((who->GetTypeId() == TYPEID_PLAYER || who->IsPet()) && !CleanerSpawn && BeginQuete)
         {
-            if (who->GetGUID() != JoueurGUID || who->IsPet())
+            if (who->GetGUID() != PlayerGUID || who->IsPet())
             {   
                 if (Creature* Crea = m_creature->SummonCreature(NPC_CLEANER, 3358.1096f, -3049.8063f, 166.226f, 1.87f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 1000))
                 {
@@ -277,6 +243,7 @@ struct npc_eris_havenfireAI : public ScriptedAI
                     summoned->AddThreat(curr, float(urand(100, 200)));
             }
         }
+
         if (Player* player = GetPlayer())
             if (player->IsAlive())
             {
@@ -319,6 +286,13 @@ struct npc_eris_havenfireAI : public ScriptedAI
             }
         }
         mobsEntries.clear();
+
+        for (auto& guid : DeathPostGUIDs)
+        {
+            if (GameObject* pGo = me->GetMap()->GetGameObject(guid))
+                pGo->Delete();
+            guid = 0;
+        }
     }
 
     void JustSummoned(Creature* summoned) override
@@ -344,11 +318,11 @@ struct npc_eris_havenfireAI : public ScriptedAI
                 summoned->CastSpell(summoned, SPELL_PESTE, true);
             // no break
             case NPC_PAYSANT_0:
-                while (VillageoisGUIDs[Var] && Var < 49)
+                while (VillagerGUIDs[Var] && Var < 49)
                     ++Var;
 
                 if (Var < 50)
-                    VillageoisGUIDs[Var] = summoned->GetGUID();
+                    VillagerGUIDs[Var] = summoned->GetGUID();
 
                 if (Player* player = GetPlayer())
                     summoned->SetFactionTemplateId(player->GetFactionTemplateId());
@@ -364,7 +338,7 @@ struct npc_eris_havenfireAI : public ScriptedAI
 
         if ((pSummoned->GetEntry() == NPC_PAYSANT_0 || pSummoned->GetEntry() == NPC_PAYSANT_1) && uiPointId == POINT_FIN_EVENT)
         {
-            ++VillageoisPasses;
+            ++VillagerSurvivedCount;
             switch (rand() % 15)
             {
                 case 0:
@@ -382,15 +356,15 @@ struct npc_eris_havenfireAI : public ScriptedAI
             }
 
             int Var = 0;
-            while (VillageoisGUIDs[Var] != pSummoned->GetGUID() && Var < 49)
+            while (VillagerGUIDs[Var] != pSummoned->GetGUID() && Var < 49)
                 ++Var;
 
             if (Var < 50)
-                VillageoisGUIDs[Var] = 0;
+                VillagerGUIDs[Var] = 0;
 
             pSummoned->ForcedDespawn();
 
-            if (VillageoisPasses >= 50)
+            if (VillagerSurvivedCount >= 50)
                 if (Player* player = GetPlayer())
                     SituationFinale(player);
         }
@@ -402,17 +376,25 @@ struct npc_eris_havenfireAI : public ScriptedAI
             return;
 
         if (pSummoned->GetEntry() == NPC_PAYSANT_0 || pSummoned->GetEntry() == NPC_PAYSANT_1)
-            ++VillageoisMorts;
+        {
+            if (VillagerDiedCount < DEATH_POST_SPAWNS_COUNT)
+            {
+                const auto& spawn = deathPostSpawnPositions[VillagerDiedCount];
+                if (GameObject* pGo = m_creature->SummonGameObject(spawn.entry, spawn.x, spawn.y, spawn.z, spawn.o, spawn.rot0, spawn.rot1, spawn.rot2, spawn.rot3, 1200000, false))
+                    DeathPostGUIDs[VillagerDiedCount] = pGo->GetGUID();
+            }
+            ++VillagerDiedCount;
+        }
 
-        if (VillageoisMorts >= 15)
+        if (VillagerDiedCount >= 15)
             EchecEvent(GetPlayer(), true);
 
         int Var = 0;
-        while (VillageoisGUIDs[Var] != pSummoned->GetGUID() && Var < 49)
+        while (VillagerGUIDs[Var] != pSummoned->GetGUID() && Var < 49)
             ++Var;
 
         if (Var < 50)
-            VillageoisGUIDs[Var] = 0;
+            VillagerGUIDs[Var] = 0;
     }
 
     void EchecEvent(Player* pPlayer, bool npcDespawn)
@@ -444,11 +426,11 @@ struct npc_eris_havenfireAI : public ScriptedAI
             return;
 
         Vague = 0;
-        VillageoisMorts = 0;
-        VillageoisPasses = 0;
+        VillagerDiedCount = 0;
+        VillagerSurvivedCount = 0;
         CleanerSpawn = false;
         BeginQuete = true;
-        JoueurGUID = pPlayer->GetGUID();
+        PlayerGUID = pPlayer->GetGUID();
 
         Timer[0] = 10000;
         Timer[1] = 100000;
@@ -458,14 +440,13 @@ struct npc_eris_havenfireAI : public ScriptedAI
             TimerArcher[i] = 5000;
             ArchersGUIDs[i] = 0;
         }
-        for (uint64 & guid : VillageoisGUIDs)
+        for (uint64 & guid : VillagerGUIDs)
             guid = 0;
 
         for (int i = ArcherPop0; i < Fin; i++)
             m_creature->SummonCreature(NPC_ARCHER, ErisHavenfireEvent[i].X, ErisHavenfireEvent[i].Y, ErisHavenfireEvent[i].Z, ErisHavenfireEvent[i].O, TEMPSUMMON_DEAD_DESPAWN, 0);
 
-        GameObject* pLight = m_creature->FindNearestGameObject(GO_LIGHT, 100.0f);
-        if (!pLight)
+        if (!m_creature->FindNearestGameObject(GO_LIGHT, 100.0f))
             m_creature->SummonGameObject(GO_LIGHT, 3327.0f, -2970.0f, 160.034f, 5.2135f, 0, 0, 0, 0, 0);
     }
 
@@ -648,7 +629,8 @@ struct npc_eris_havenfireAI : public ScriptedAI
         {
             if (DoCastSpellIfCan(m_creature, SPELL_BUFF) == CAST_OK)
             {
-                DoScriptText(SAY_ERIS_HEAL, m_creature);
+                if (Player* player = GetPlayer())
+                    DoScriptText(SAY_ERIS_HEAL, m_creature, player);
                 BuffTimer = urand(75000, 90000);
             }
         }
@@ -673,12 +655,12 @@ struct npc_eris_havenfireAI : public ScriptedAI
 
                         while (Var < 50)
                         {
-                            if (VillageoisGUIDs[Var])
+                            if (VillagerGUIDs[Var])
                             {
-                                Unit* Villagois = m_creature->GetMap()->GetCreature(VillageoisGUIDs[Var]);
+                                Unit* Villagois = m_creature->GetMap()->GetCreature(VillagerGUIDs[Var]);
                                 if (Villagois && Villagois->IsAlive())
                                 {
-                                    GUIDs[var] = VillageoisGUIDs[Var];
+                                    GUIDs[var] = VillagerGUIDs[Var];
                                     ++var;
                                 }
                             }
@@ -749,10 +731,7 @@ struct npc_eris_havenfire_peasantAI : public ScriptedAI
         m_uiSayPeasantTimer = urand(10000, 30000);
     }
 
-    void KilledUnit(Unit* victim) override
-    {
-    }
-
+    void KilledUnit(Unit* victim) override { }
 
     void DamageTaken(Unit *done_by, uint32 &damage) override
     {
@@ -775,7 +754,7 @@ struct npc_eris_havenfire_peasantAI : public ScriptedAI
 
             if (npc_eris_havenfireAI* pErisEventAI = dynamic_cast<npc_eris_havenfireAI*>(eris->AI()))
             {
-                if (pCaster->GetGUID() != pErisEventAI->JoueurGUID && pErisEventAI->BeginQuete && !pErisEventAI->CleanerSpawn)
+                if (pCaster->GetGUID() != pErisEventAI->PlayerGUID && pErisEventAI->BeginQuete && !pErisEventAI->CleanerSpawn)
                 {
                     if (Creature* Crea = m_creature->SummonCreature(NPC_CLEANER, 3358.1096f, -3049.8063f, 166.226f, 1.87f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 1000))
                     {
@@ -789,9 +768,7 @@ struct npc_eris_havenfire_peasantAI : public ScriptedAI
         }
     }
 
-    void MoveInLineOfSight(Unit* who) override
-    {
-    }
+    void MoveInLineOfSight(Unit* who) override { }
 
     void MovementInform(uint32 uiType, uint32 uiPointId) override
     {
@@ -848,7 +825,7 @@ CreatureAI* GetAI_npc_eris_havenfire_peasant(Creature* pCreature)
     return new npc_eris_havenfire_peasantAI(pCreature);
 }
 
-enum
+enum DemetriaData
 {
     NPC_SCARLET_TROOPER                 = 12352,
     SPELL_MIND_BLAST                    = 17194,
@@ -867,7 +844,9 @@ struct npc_demetriaAI : public ScriptedAI
     {
         Reset();
     }
+
     uint64 guidScarletTrooper[9];
+
     void MovementInform(uint32 movementType, uint32 moveId) override
     {
         if (movementType != WAYPOINT_MOTION_TYPE)
@@ -895,16 +874,19 @@ struct npc_demetriaAI : public ScriptedAI
                 }
             }
         }
+
         if (moveId == 99)
         {
             DespawnTroopers();
             m_creature->ForcedDespawn();
         }
     }
+
     void JustDied(Unit* Killer) override
     {
         DespawnTroopers();
     }
+
     void DespawnTroopers()
     {
         for (uint64 guid : guidScarletTrooper)
@@ -999,6 +981,7 @@ struct npc_demetriaAI : public ScriptedAI
         }
         DoMeleeAttackIfReady();
     }
+
     void Reset() override
     {
         MindBlast_Timer = 3000;
@@ -1010,6 +993,7 @@ struct npc_demetriaAI : public ScriptedAI
         Resurrect_Timer = 10000;
         m_creature->AddAura(SPELL_SHADOWFORM);
     }
+
     void DoRessurectUnit(Creature* creature, Unit* victim)//from Thekal's script.
     {
         float x, y, z, o;
@@ -1028,11 +1012,11 @@ struct npc_demetriaAI : public ScriptedAI
             creature->AI()->AttackStart(victim);
     }
 };
+
 CreatureAI* GetAI_npc_demetria(Creature* pCreature)
 {
     return new npc_demetriaAI(pCreature);
 }
-
 
 /******************************
 *** npc_darrowshire_trigger ***
@@ -1060,7 +1044,7 @@ static DarrowshireMove DarrowshireEvent[] =
     {1446.8f, -3694.27f, 76.5966f, 0.401503f}       // Defender spawn Davil Lightfire / Captain Redpath / Joseph Redpath
 };
 
-enum
+enum DarrowshireTriggerData
 {
     // Attacker
     NPC_MARAUDING_CORPSE        = 10951,
@@ -1085,28 +1069,28 @@ enum
 
     SPELL_SUMMON_MARDUK_THE_BLACK = 18650,
 
-    SAY_HORGUS_DIED             = -1900133,
-    SAY_LIGHTFIRE_DIED          = -1900134,
-    SAY_REDPATH_DIED            = -1900135,
-    SAY_SCOURGE_DEFEATED        = -1900136,
-    SAY_MILITIA_RANDOM_1        = -1900137,
-    SAY_MILITIA_RANDOM_2        = -1900138,
-    SAY_MILITIA_RANDOM_3        = -1900139,
-    SAY_MILITIA_RANDOM_4        = -1900140,
-    SAY_MILITIA_RANDOM_5        = -1900141,
-    SAY_MILITIA_RANDOM_6        = -1900142,
-    SAY_MILITIA_RANDOM_7        = -1900143,
-    SAY_MILITIA_RANDOM_8        = -1900144,
-    SAY_DEFENDER_YELL           = -1900145,
-    SAY_LIGHTFIRE_YELL          = -1900146,
-    SAY_DAVIL_YELL              = -1900147,
-    SAY_HORGUS_YELL             = -1900148,
-    SAY_DAVIL_DESPAWN           = -1900149,
-    SAY_REDPATH_YELL            = -1900150,
-    SAY_REDPATH_CORRUPTED       = -1900151,
-    SAY_MARDUK_YELL             = -1900152,
+    SAY_HORGUS_DIED             = 7368,
+    SAY_LIGHTFIRE_DIED          = 7366,
+    SAY_REDPATH_DIED            = 7369,
+    SAY_SCOURGE_DEFEATED        = 7407,
+    SAY_MILITIA_RANDOM_1        = 7347,
+    SAY_MILITIA_RANDOM_2        = 7348,
+    SAY_MILITIA_RANDOM_3        = 7349,
+    SAY_MILITIA_RANDOM_4        = 7350,
+    SAY_MILITIA_RANDOM_5        = 7351,
+    SAY_MILITIA_RANDOM_6        = 7352,
+    SAY_MILITIA_RANDOM_7        = 7353,
+    SAY_MILITIA_RANDOM_8        = 7354,
+    SAY_DEFENDER_YELL           = 7358,
+    SAY_LIGHTFIRE_YELL          = 7343,
+    SAY_DAVIL_YELL              = 7346,
+    SAY_HORGUS_YELL             = 7344,
+    SAY_DAVIL_DESPAWN           = 7227,
+    SAY_REDPATH_YELL            = 7355,
+    SAY_REDPATH_CORRUPTED       = 7357,
+    SAY_MARDUK_YELL             = 7471,
 
-    QUEST_BATTLE_DARROWSHIRE    = 5721,
+    QUEST_BATTLE_DARROWSHIRE    = 5721
 };
 
 struct npc_darrowshire_triggerAI : public ScriptedAI
@@ -1153,6 +1137,7 @@ struct npc_darrowshire_triggerAI : public ScriptedAI
                 }
             }
         }
+
         PhaseStep = 0;
         PhaseTimer = 6000;
 
@@ -1164,18 +1149,21 @@ struct npc_darrowshire_triggerAI : public ScriptedAI
 
     bool _cleanupDone;
     bool _initialized;
+
     void OnRemoveFromWorld() override
     {
         if (_cleanupDone || !_initialized)
             return;
         DespawnAll();
     }
+
     void DespawnGuid(ObjectGuid& g)
     {
         if (Creature* c = m_creature->GetMap()->GetCreature(g))
             c->ForcedDespawn();
         g.Clear();
     }
+
     void DespawnAll()
     {
         _cleanupDone = true;
@@ -1230,7 +1218,7 @@ struct npc_darrowshire_triggerAI : public ScriptedAI
                 summoned->GetMotionMaster()->MovePoint(2, DarrowshireEvent[4].X, DarrowshireEvent[4].Y, DarrowshireEvent[4].Z, MOVE_PATHFINDING, 5.0f);
                 break;
             case NPC_MARDUK_THE_BLACK:
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_PASSIVE | UNIT_FLAG_NON_ATTACKABLE);
+                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_IMMUNE_TO_NPC | UNIT_FLAG_NON_ATTACKABLE);
                 summoned->ForcedDespawn(12000);
                 break;
             default:
@@ -1647,20 +1635,19 @@ CreatureAI* GetAI_npc_darrowshire_trigger(Creature* pCreature)
     return new npc_darrowshire_triggerAI(pCreature);
 }
 
-
 /*************************
 *** npc_joseph_redpath ***
 *************************/
 
-enum
+enum JosephRedpathData
 {
-    SAY_JOSEPH_1            = -1900153,
-    SAY_PAMELA_1            = -1900154,
-    SAY_PAMELA_2            = -1900155,
-    SAY_PAMELA_3            = -1900156,
-    SAY_JOSEPH_2            = -1900157,
-    SAY_PAMELA_4            = -1900158,
-    SAY_JOSEPH_3            = -1900159,
+    SAY_JOSEPH_1            = 7397,
+    SAY_PAMELA_1            = 7399,
+    SAY_PAMELA_2            = 7400,
+    SAY_PAMELA_3            = 7401,
+    SAY_JOSEPH_2            = 7398,
+    SAY_PAMELA_4            = 7402,
+    SAY_JOSEPH_3            = 7403,
 
     NPC_PAMELA_REDPATH      = 10926
 };
@@ -1678,9 +1665,7 @@ struct npc_joseph_redpathAI : public ScriptedAI
     uint32 EventStep;
     uint32 EventTimer;
 
-    void Reset() override
-    {
-    }
+    void Reset() override { }
 
     void BeginEvent()
     {
@@ -1828,12 +1813,14 @@ bool GossipHello_npc_joseph_redpath(Player* pPlayer, Creature* pCreature)
     }
     return true;
 }
-enum
+
+enum MarkOfDetonationData
 {
     QUEST_WHEN_SMOKEY_SINGS__I_GET_VIOLENT  = 6041,
     SPELL_PLACING_SMOKEY_S_EXPLOSIVES       = 19250,
     TRIGGER_SCOURGE_STRUCTURE = 12247
 };
+
 bool EffectDummyGameObj_go_mark_of_detonation(WorldObject* pCaster, uint32 uiSpellId, SpellEffectIndex effIndex, GameObject* pGameObjectTarget)
 {
     //always check spellid and effectindex
@@ -1857,18 +1844,6 @@ bool EffectDummyGameObj_go_mark_of_detonation(WorldObject* pCaster, uint32 uiSpe
 void AddSC_eastern_plaguelands()
 {
     Script* newscript;
-
-    newscript = new Script;
-    newscript->Name = "npc_darrowshire_spirit";
-    newscript->GetAI = &GetAI_npc_darrowshire_spirit;
-    newscript->pGossipHello = &GossipHello_npc_darrowshire_spirit;
-    newscript->RegisterSelf();
-
-    newscript = new Script;
-    newscript->Name = "npc_tirion_fordring";
-    newscript->pGossipHello =  &GossipHello_npc_tirion_fordring;
-    newscript->pGossipSelect = &GossipSelect_npc_tirion_fordring;
-    newscript->RegisterSelf();
 
     // Nostalrius -- Rockette
 

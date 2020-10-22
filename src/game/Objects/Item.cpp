@@ -40,8 +40,10 @@ void AddItemsSetItem(Player* player, Item* item)
         return;
     }
 
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_6_1
     if (set->required_skill_id && player->GetSkillValue(set->required_skill_id) < set->required_skill_value)
         return;
+#endif
 
     ItemSetEffect* eff = nullptr;
 
@@ -216,8 +218,9 @@ Item::Item() : loot(nullptr)
 {
     m_objectType |= TYPEMASK_ITEM;
     m_objectTypeId = TYPEID_ITEM;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
     m_updateFlag = UPDATEFLAG_ALL;
-
+#endif
     m_valuesCount = ITEM_END;
     m_slot = 0;
     uState = ITEM_NEW;
@@ -241,6 +244,9 @@ bool Item::Create(uint32 guidlow, uint32 itemid, ObjectGuid ownerGuid)
     ItemPrototype const* itemProto = ObjectMgr::GetItemPrototype(itemid);
     if (!itemProto)
         return false;
+
+    ApplyModFlag(ITEM_FIELD_FLAGS, ITEM_DYNFLAG_UNK6, itemProto->Flags & ITEM_FLAG_UNK6);
+    ApplyModFlag(ITEM_FIELD_FLAGS, ITEM_DYNFLAG_UNK13, itemProto->Flags & ITEM_FLAG_CHARTER);
 
     SetUInt32Value(ITEM_FIELD_STACK_COUNT, 1);
     SetUInt32Value(ITEM_FIELD_MAXDURABILITY, itemProto->MaxDurability);
@@ -472,6 +478,9 @@ bool Item::LoadFromDB(uint32 guidLow, ObjectGuid ownerGuid, Field* fields, uint3
     if (IsSoulBound() && proto->Bonding == NO_BIND)
     {
         ApplyModFlag(ITEM_FIELD_FLAGS, ITEM_DYNFLAG_BINDED, false);
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_6_1
+        ApplyModFlag(ITEM_FIELD_FLAGS, ITEM_DYNFLAG_UNK16, false);
+#endif
         need_save = true;
     }
 

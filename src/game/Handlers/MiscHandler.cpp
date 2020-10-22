@@ -37,7 +37,7 @@
 #include "LootMgr.h"
 #include "Chat.h"
 #include "ScriptMgr.h"
-#include <zlib/zlib.h>
+#include <zlib.h>
 #include "ObjectAccessor.h"
 #include "Object.h"
 #include "BattleGround.h"
@@ -93,12 +93,13 @@ public:
         sess->SetReceivedWhoRequest(false);
         if (!sess->GetPlayer() || !sess->GetPlayer()->IsInWorld())
             return;
-        uint32 clientcount = 0;
-        Team team = sess->GetPlayer()->GetTeam();
-        AccountTypes security = sess->GetSecurity();
-        bool allowTwoSideWhoList = sWorld.getConfig(CONFIG_BOOL_ALLOW_TWO_SIDE_WHO_LIST);
-        AccountTypes gmLevelInWhoList = (AccountTypes)sWorld.getConfig(CONFIG_UINT32_GM_LEVEL_IN_WHO_LIST);
 
+        uint32 clientcount = 0;
+        Team const team = sess->GetPlayer()->GetTeam();
+        AccountTypes const security = sess->GetSecurity();
+        bool const allowTwoSideWhoList = sWorld.getConfig(CONFIG_BOOL_ALLOW_TWO_SIDE_WHO_LIST);
+        bool const showBotsInWhoList = sWorld.getConfig(CONFIG_BOOL_PLAYER_BOT_SHOW_IN_WHO_LIST);
+        AccountTypes const gmLevelInWhoList = (AccountTypes)sWorld.getConfig(CONFIG_UINT32_GM_LEVEL_IN_WHO_LIST);
         uint32 const zone = sess->GetPlayer()->GetCachedZoneId();
         bool const notInBattleground = !((zone == 2597) || (zone == 3277) || (zone == 3358));
 
@@ -122,6 +123,10 @@ public:
                 if (pPlayer->GetSession()->GetSecurity() > gmLevelInWhoList)
                     continue;
             }
+
+            // skip bots
+            if (!showBotsInWhoList && pPlayer->GetSession()->GetBot())
+                continue;
 
             // do not process players which are not in world
             if (!pPlayer->IsInWorld())
@@ -215,7 +220,7 @@ public:
             data << uint32(pzoneid);                            // player zone id
 
 #if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_8_4
-            data << uint32(0);                                  // unknown
+            data << uint32(pPlayer->GetWhoListPartyStatus());   // not actually displayed anywhere
 #endif
             // 50 is maximum player count sent to client
             if ((++clientcount) == 49)
@@ -340,7 +345,7 @@ void WorldSession::HandleLogoutRequestOpcode(WorldPacket& /*recv_data*/)
         return;
     }
 
-    //instant logout in taverns/cities or on taxi or for admins, gm's, mod's if its enabled in mangosd.conf
+    // instant logout in taverns/cities or on taxi or for admins, gm's, mod's if its enabled in mangosd.conf
     if (GetPlayer()->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING) || GetPlayer()->IsTaxiFlying() ||
             GetSecurity() >= (AccountTypes)sWorld.getConfig(CONFIG_UINT32_INSTANT_LOGOUT))
     {
@@ -603,17 +608,17 @@ void WorldSession::HandleAddIgnoreOpcode(WorldPacket& recv_data)
 
     DEBUG_LOG("WORLD: Received CMSG_ADD_IGNORE");
 
-    std::string IgnoreName = GetMangosString(LANG_FRIEND_IGNORE_UNKNOWN);
+    std::string ignoreName = GetMangosString(LANG_FRIEND_IGNORE_UNKNOWN);
 
-    recv_data >> IgnoreName;
+    recv_data >> ignoreName;
 
-    if (!normalizePlayerName(IgnoreName))
+    if (!normalizePlayerName(ignoreName))
         return;
 
     DEBUG_LOG("WORLD: %s asked to Ignore: '%s'",
-              GetMasterPlayer()->GetName(), IgnoreName.c_str());
+              GetMasterPlayer()->GetName(), ignoreName.c_str());
 
-    PlayerCacheData *pData = sObjectMgr.GetPlayerDataByName(IgnoreName);
+    PlayerCacheData *pData = sObjectMgr.GetPlayerDataByName(ignoreName);
     if (!pData)
         return;
 
@@ -806,7 +811,7 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recv_data)
             return;
 
         if ((pPlayer->GetLevel() < bg->GetMinLevel() || pPlayer->GetLevel() > bg->GetMaxLevel()) ||
-            (pPlayer->GetTeam() == pBgEntrance->team))
+            (pPlayer->GetTeam() != pBgEntrance->team))
         {
             SendAreaTriggerMessage("You must be in the %s and at least %u%s level to enter.", pPlayer->GetTeam() == ALLIANCE ? "Alliance" : "Horde", bg->GetMinLevel(), bg->GetMinLevel() % 2 ? "st" : "th");
             return;
@@ -882,10 +887,6 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recv_data)
         if (pTeleTrigger->destination.mapId != corpseMapId)
             if (AreaTriggerTeleport const* corpseAt = sObjectMgr.GetMapEntranceTrigger(corpseMapId))
                 pTeleTrigger = corpseAt;
-
-        // now we can resurrect player, and then check teleport requirements
-        pPlayer->ResurrectPlayer(0.5f);
-        pPlayer->SpawnCorpseBones();
     }
 
     if (!pPlayer->IsGameMaster() && !pPlayer->HasCheatOption(PLAYER_CHEAT_TRIGGER_PASS))
@@ -971,18 +972,18 @@ void WorldSession::HandleNextCinematicCamera(WorldPacket& /*recv_data*/)
 
 void WorldSession::HandleSetActionBarTogglesOpcode(WorldPacket& recv_data)
 {
-    uint8 ActionBar;
+    uint8 actionBar;
 
-    recv_data >> ActionBar;
+    recv_data >> actionBar;
 
     if (!GetPlayer())                                       // ignore until not logged (check needed because STATUS_AUTHED)
     {
-        if (ActionBar != 0)
-            sLog.outError("WorldSession::HandleSetActionBarToggles in not logged state with value: %u, ignored", uint32(ActionBar));
+        if (actionBar != 0)
+            sLog.outError("WorldSession::HandleSetActionBarToggles in not logged state with value: %u, ignored", uint32(actionBar));
         return;
     }
 
-    GetPlayer()->SetByteValue(PLAYER_FIELD_BYTES, 2, ActionBar);
+    GetPlayer()->SetByteValue(PLAYER_FIELD_BYTES, 2, actionBar);
 }
 
 void WorldSession::HandlePlayedTime(WorldPacket& /*recv_data*/)
@@ -1001,8 +1002,14 @@ void WorldSession::HandleInspectOpcode(WorldPacket& recv_data)
 
     _player->SetSelectionGuid(guid);
 
-    Player* plr = sObjectMgr.GetPlayer(guid);
-    if (!plr)                                               // wrong player
+    Player* pTarget = sObjectMgr.GetPlayer(guid);
+    if (!pTarget)
+        return;
+
+    if (_player->GetDistance3dToCenter(pTarget) > INSPECT_DISTANCE)
+        return;
+
+    if (_player->IsValidAttackTarget(pTarget))
         return;
 
     WorldPacket data(SMSG_INSPECT, 8);
@@ -1010,63 +1017,72 @@ void WorldSession::HandleInspectOpcode(WorldPacket& recv_data)
     SendPacket(&data);
 }
 
-void WorldSession::HandleInspectHonorStatsOpcode(WorldPacket& recv_data) {
+void WorldSession::HandleInspectHonorStatsOpcode(WorldPacket& recv_data)
+{
     ObjectGuid guid;
     recv_data >> guid;
-    // DEBUG_LOG("Party Stats guid is " I64FMTD,guid);
 
-    Player* pPlayer = sObjectMgr.GetPlayer(guid);
-    if (pPlayer)
-    {
-        WorldPacket data(MSG_INSPECT_HONOR_STATS, (8 + 1 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1));
-        data << guid;                                       // player guid
-        data << (uint8)pPlayer->GetHonorMgr().GetHighestRank().rank;           // Highest Rank
+    Player* pTarget = sObjectMgr.GetPlayer(guid);
+    if (!pTarget)
+        return;
 
-                                                                          // Today Honorable and Dishonorable Kills
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_SESSION_KILLS);
+    if (_player->GetDistance3dToCenter(pTarget) > INSPECT_DISTANCE)
+        return;
 
-        // Yesterday Honorable Kills
-        data << pPlayer->GetUInt16Value(PLAYER_FIELD_YESTERDAY_KILLS, 0);
+    if (_player->IsValidAttackTarget(pTarget))
+        return;
 
-        // Unknown (deprecated, yesterday dishonourable?)
-        data << (uint16)0;
+    WorldPacket data(MSG_INSPECT_HONOR_STATS, (8 + 1 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1));
 
-        // Last Week Honorable Kills
-        data << pPlayer->GetUInt16Value(PLAYER_FIELD_LAST_WEEK_KILLS, 0);
+    // player guid
+    data << guid;
 
-        // Unknown (deprecated, last week dishonourable?)
-        data << (uint16)0;
+    // Highest Rank
+    data << (uint8)pTarget->GetHonorMgr().GetHighestRank().rank;
 
-        // This Week Honorable kills
-        data << pPlayer->GetUInt16Value(PLAYER_FIELD_THIS_WEEK_KILLS, 0);
+    // Today Honorable and Dishonorable Kills
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_SESSION_KILLS);
 
-        // Unknown (deprecated, this week dishonourable?)
-        data << (uint16)0;
+    // Yesterday Honorable Kills
+    data << pTarget->GetUInt16Value(PLAYER_FIELD_YESTERDAY_KILLS, 0);
 
-        // Lifetime Honorable Kills
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS);
+    // Unknown (deprecated, yesterday dishonourable?)
+    data << (uint16)0;
 
-        // Lifetime Dishonorable Kills
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_LIFETIME_DISHONORABLE_KILLS);
+    // Last Week Honorable Kills
+    data << pTarget->GetUInt16Value(PLAYER_FIELD_LAST_WEEK_KILLS, 0);
 
-        // Yesterday Honor
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_YESTERDAY_CONTRIBUTION);
+    // Unknown (deprecated, last week dishonourable?)
+    data << (uint16)0;
 
-        // Last Week Honor
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_LAST_WEEK_CONTRIBUTION);
+    // This Week Honorable kills
+    data << pTarget->GetUInt16Value(PLAYER_FIELD_THIS_WEEK_KILLS, 0);
 
-        // This Week Honor
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_THIS_WEEK_CONTRIBUTION);
+    // Unknown (deprecated, this week dishonourable?)
+    data << (uint16)0;
 
-        // Last Week Standing
-        data << pPlayer->GetUInt32Value(PLAYER_FIELD_LAST_WEEK_RANK);
+    // Lifetime Honorable Kills
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS);
 
-        // Rank progress bar
-        data << (uint8)pPlayer->GetByteValue(PLAYER_FIELD_BYTES2, 0);
+    // Lifetime Dishonorable Kills
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_LIFETIME_DISHONORABLE_KILLS);
 
-        SendPacket(&data);
-    } else
-        DEBUG_LOG("%s not found!", guid.GetString().c_str());
+    // Yesterday Honor
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_YESTERDAY_CONTRIBUTION);
+
+    // Last Week Honor
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_LAST_WEEK_CONTRIBUTION);
+
+    // This Week Honor
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_THIS_WEEK_CONTRIBUTION);
+
+    // Last Week Standing
+    data << pTarget->GetUInt32Value(PLAYER_FIELD_LAST_WEEK_RANK);
+
+    // Rank progress bar
+    data << (uint8)pTarget->GetByteValue(PLAYER_FIELD_BYTES2, 0);
+
+    SendPacket(&data);
 }
 
 void WorldSession::HandleWorldTeleportOpcode(WorldPacket& recv_data)
@@ -1076,18 +1092,18 @@ void WorldSession::HandleWorldTeleportOpcode(WorldPacket& recv_data)
     // Time is ***, map=469, x=452.000000, y=6454.000000, z=2536.000000, orient=3.141593
 
     uint32 time;
-    uint32 mapid;
-    float PositionX;
-    float PositionY;
-    float PositionZ;
-    float Orientation;
+    uint32 mapId;
+    float positionX;
+    float positionY;
+    float positionZ;
+    float orientation;
 
     recv_data >> time;                                      // time in m.sec.
-    recv_data >> mapid;
-    recv_data >> PositionX;
-    recv_data >> PositionY;
-    recv_data >> PositionZ;
-    recv_data >> Orientation;                               // o (3.141593 = 180 degrees)
+    recv_data >> mapId;
+    recv_data >> positionX;
+    recv_data >> positionY;
+    recv_data >> positionZ;
+    recv_data >> orientation;                               // o (3.141593 = 180 degrees)
 
     //DEBUG_LOG("Received opcode CMSG_WORLD_TELEPORT");
 
@@ -1097,10 +1113,10 @@ void WorldSession::HandleWorldTeleportOpcode(WorldPacket& recv_data)
         return;
     }
 
-    DEBUG_LOG("Time %u sec, map=%u, x=%f, y=%f, z=%f, orient=%f", time / 1000, mapid, PositionX, PositionY, PositionZ, Orientation);
+    DEBUG_LOG("Time %u sec, map=%u, x=%f, y=%f, z=%f, orient=%f", time / 1000, mapId, positionX, positionY, positionZ, orientation);
 
     if (GetSecurity() >= SEC_ADMINISTRATOR)
-        GetPlayer()->TeleportTo(mapid, PositionX, PositionY, PositionZ, Orientation);
+        GetPlayer()->TeleportTo(mapId, positionX, positionY, positionZ, orientation);
     else
         SendNotification(LANG_YOU_NOT_HAVE_PERMISSION);
     DEBUG_LOG("Received worldport command from player %s", GetPlayer()->GetName());
@@ -1187,7 +1203,6 @@ void WorldSession::HandleWhoisOpcode(WorldPacket& recv_data)
 void WorldSession::HandleFarSightOpcode(WorldPacket& recv_data)
 {
     DEBUG_LOG("WORLD: CMSG_FAR_SIGHT");
-    //recv_data.hexlike();
 
     uint8 op;
     recv_data >> op;

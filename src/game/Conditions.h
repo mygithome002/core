@@ -84,8 +84,8 @@ enum ConditionType
     CONDITION_ACTIVE_GAME_EVENT     = 12,                   // Checks if a given game event is currently active.
                                                             // Requirement: None
                                                             // Value1: event_id
-    CONDITION_CANT_PATH_TO_VICTIM   = 13,                   // Returns true if the creature is chasing a victim but is unable to find a path to it.
-                                                            // Requirement: Creature Source
+    CONDITION_CANT_PATH_TO_VICTIM   = 13,                   // Returns true if the source is chasing a victim but is unable to find a path to it.
+                                                            // Requirement: Unit Source
     CONDITION_RACE_CLASS            = 14,                   // Checks if the player's race and class matches the given mask.
                                                             // Requirement: Player Target
                                                             // Value1: race_mask
@@ -112,6 +112,8 @@ enum ConditionType
                                                             // Requirement: WorldObject Target
                                                             // Value1: creature_id
                                                             // Value2: search_radius
+                                                            // Value3: dead
+                                                            // Value4: not_self
     CONDITION_NEARBY_GAMEOBJECT     = 21,                   // Checks if there is a gameobject nearby with the given id.
                                                             // Requirement: WorldObject Target
                                                             // Value1: gobject_id
@@ -216,6 +218,12 @@ enum ConditionType
                                                             // Requirement: Player Target
                                                             // Value1: rank
                                                             // Value2: 0, 1 or 2 (0: equal to, 1: equal or higher than, 2: equal or less than)
+    CONDITION_DB_GUID               = 52,                   // Checks source object's db guid.
+                                                            // Requirement: WorldObject Source
+                                                            // Value1: guid
+                                                            // Value2: guid (optional)
+                                                            // Value3: guid (optional)
+                                                            // Value4: guid (optional)
 };
 
 enum ConditionFlags
@@ -237,6 +245,7 @@ enum ConditionSource                                        // From where was th
     CONDITION_FROM_MAP_EVENT        = 8,                    // Used to check conditions from scripted map events
     CONDITION_FROM_DBSCRIPTS        = 9,                    // Used to check a condition from DB Scripts Engine
     CONDITION_FROM_AREATRIGGER      = 10,                   // Used to check a condition from areatrigger_teleport table
+    CONDITION_FROM_QUEST            = 11,                   // Used to check a condition from quest_template
 };
 
 enum ConditionRequirement

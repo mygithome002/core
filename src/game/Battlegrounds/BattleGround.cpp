@@ -374,14 +374,11 @@ void BattleGround::Update(uint32 diff)
             SetStatus(STATUS_IN_PROGRESS);
             SetStartDelayTime(m_StartDelayTimes[BG_STARTING_EVENT_FOURTH]);
 
-            {
+            PlaySoundToAll(SOUND_BG_START);
 
-                PlaySoundToAll(SOUND_BG_START);
-
-                //Announce BG starting
-                if (sWorld.getConfig(CONFIG_BOOL_BATTLEGROUND_QUEUE_ANNOUNCER_START))
-                    sWorld.SendWorldText(LANG_BG_STARTED_ANNOUNCE_WORLD, GetName(), GetMinLevel(), GetMaxLevel());
-            }
+            //Announce BG starting
+            if (sWorld.getConfig(CONFIG_BOOL_BATTLEGROUND_QUEUE_ANNOUNCER_START))
+                sWorld.SendWorldText(LANG_BG_STARTED_ANNOUNCE_WORLD, GetName(), GetMinLevel(), GetMaxLevel());
         }
     }
     // Despawn des portes apres 2min (preparation) + 1min
@@ -1234,6 +1231,14 @@ ObjectGuid BattleGround::GetSingleCreatureGuid(uint8 event1, uint8 event2)
 {
     BGCreatures::const_iterator itr = m_EventObjects[MAKE_PAIR32(event1, event2)].creatures.begin();
     if (itr != m_EventObjects[MAKE_PAIR32(event1, event2)].creatures.end())
+        return *itr;
+    return ObjectGuid();
+}
+
+ObjectGuid BattleGround::GetSingleGameObjectGuid(uint8 event1, uint8 event2)
+{
+    BGObjects::const_iterator itr = m_EventObjects[MAKE_PAIR32(event1, event2)].gameobjects.begin();
+    if (itr != m_EventObjects[MAKE_PAIR32(event1, event2)].gameobjects.end())
         return *itr;
     return ObjectGuid();
 }

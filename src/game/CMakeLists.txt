@@ -16,8 +16,6 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 set (game_SRCS 
-    AdvancedPlayerBotAI.h
-    AdvancedPlayerBotAI.cpp
     AccountMgr.cpp
     AuraRemovalMgr.cpp
     AutoBroadCastMgr.cpp
@@ -73,18 +71,6 @@ set (game_SRCS
     Anticheat/Anticheat.cpp
     AuctionHouse/AuctionHouseBotMgr.cpp
     AuctionHouse/AuctionHouseMgr.cpp
-    AutoTesting/AutoTestingMgr.cpp
-    AutoTesting/TestLoader.cpp
-    AutoTesting/Tests/AurasStack.cpp
-    AutoTesting/Tests/ChanneledSpells.cpp
-    AutoTesting/Tests/Cinematics.cpp
-    AutoTesting/Tests/ControlSpells.cpp
-    AutoTesting/Tests/Generic.cpp
-    AutoTesting/Tests/Mage.cpp
-    AutoTesting/Tests/PacketBroadcaster.cpp
-    AutoTesting/Tests/Shaman.cpp
-    AutoTesting/Tests/Test.cpp
-    AutoTesting/Tests/Warlock.cpp
     Battlegrounds/BattleGround.cpp
     Battlegrounds/BattleGroundAB.cpp
     Battlegrounds/BattleGroundAV.cpp
@@ -97,8 +83,6 @@ set (game_SRCS
     Chat/AbstractPlayer.cpp
     Chat/MasterPlayer.cpp
     Chat/MasterPlayerChat.cpp
-    CinematicStuff/CinematicStuff.cpp
-    CinematicStuff/CinematicStuff.h
     Commands/AccountCommands.cpp
     Commands/CharacterCommands.cpp
     Commands/CreatureCommands.cpp
@@ -201,6 +185,10 @@ set (game_SRCS
     PacketBroadcast/ChatCommands.cpp
     PacketBroadcast/MovementBroadcaster.cpp
     PacketBroadcast/PlayerBroadcaster.cpp
+    PlayerBots/PartyBotAI.cpp
+    PlayerBots/CombatBotBaseAI.cpp
+    PlayerBots/BattleBotAI.cpp
+    PlayerBots/BattleBotWaypoints.cpp
     PlayerBots/PlayerBotAI.cpp
     PlayerBots/PlayerBotMgr.cpp
     Protocol/Opcodes.cpp
@@ -285,8 +273,6 @@ set (game_SRCS
     Anticheat/Anticheat.h
     AuctionHouse/AuctionHouseBotMgr.h
     AuctionHouse/AuctionHouseMgr.h
-    AutoTesting/AutoTestingMgr.h
-    AutoTesting/Tests/TestPCH.h
     Battlegrounds/BattleGround.h
     Battlegrounds/BattleGroundAB.h
     Battlegrounds/BattleGroundAV.h
@@ -385,6 +371,10 @@ set (game_SRCS
     OutdoorPvP/OutdoorPvPSI.h
     PacketBroadcast/MovementBroadcaster.h
     PacketBroadcast/PlayerBroadcaster.h
+    PlayerBots/CombatBotBaseAI.h
+    PlayerBots/PartyBotAI.h
+    PlayerBots/BattleBotAI.h
+    PlayerBots/BattleBotWaypoints.h
     PlayerBots/PlayerBotAI.h
     PlayerBots/PlayerBotMgr.h
     Protocol/Opcodes.h
@@ -465,10 +455,8 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/AI
   ${CMAKE_CURRENT_SOURCE_DIR}/Anticheat
   ${CMAKE_CURRENT_SOURCE_DIR}/AuctionHouse
-  ${CMAKE_CURRENT_SOURCE_DIR}/AutoTesting
   ${CMAKE_CURRENT_SOURCE_DIR}/Battlegrounds
   ${CMAKE_CURRENT_SOURCE_DIR}/Chat
-  ${CMAKE_CURRENT_SOURCE_DIR}/CinematicStuff
   ${CMAKE_CURRENT_SOURCE_DIR}/Commands
   ${CMAKE_CURRENT_SOURCE_DIR}/Database
   ${CMAKE_CURRENT_SOURCE_DIR}/Group
@@ -486,7 +474,6 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots
   ${CMAKE_CURRENT_SOURCE_DIR}/Protocol
   ${CMAKE_CURRENT_SOURCE_DIR}/Spells
-  ${CMAKE_CURRENT_SOURCE_DIR}/Texts
   ${CMAKE_CURRENT_SOURCE_DIR}/Threat
   ${CMAKE_CURRENT_SOURCE_DIR}/Transports
   ${CMAKE_CURRENT_SOURCE_DIR}/vmap
@@ -505,11 +492,12 @@ include_directories(
   ${TBB_INCLUDE_DIRS}
   ${ACE_INCLUDE_DIR}
   ${OPENSSL_INCLUDE_DIR}
+  ${ZLIB_INCLUDE_DIRS}
 )
 
 if(WIN32)
   include_directories(
-    ${CMAKE_SOURCE_DIR}/dep/include-windows
+    ${CMAKE_SOURCE_DIR}/dep/windows/include
   )
 endif()
 

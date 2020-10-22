@@ -30,9 +30,18 @@ enum
     SAY_LEASH                   = -1469001,
 
     SPELL_CLEAVE                = 15284, //26350
+    SPELL_KNOCK_AWAY            = 18670, //25778
     SPELL_BLAST_WAVE            = 23331,
-    SPELL_MORTAL_STRIKE         = 24573,
-    SPELL_KNOCK_AWAY            = 18670 //25778
+
+    // World of Warcraft Client Patch 1.8.0 (2005-10-11)
+    // - Fixed a bug that was causing Broodlord Lashlayer to do less damage 
+    //   than intended with his Mortal Strike.
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
+    SPELL_MORTAL_STRIKE         = 24573, // added to dbc in 1.7.0
+#else
+    SPELL_MORTAL_STRIKE         = 23847, // added to dbc in 1.6.0, removed in 1.8.0
+#endif
+    
 };
 
 struct boss_broodlordAI : public ScriptedAI
@@ -130,9 +139,9 @@ struct boss_broodlordAI : public ScriptedAI
                     continue;
                 */
                 if (on)
-                    curr->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_PASSIVE);
+                    curr->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_IMMUNE_TO_NPC);
                 else
-                    curr->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_PASSIVE);
+                    curr->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_IMMUNE_TO_NPC);
             }
         }
         m_bMobsDesactives = on;

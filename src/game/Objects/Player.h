@@ -344,6 +344,15 @@ enum PlayerFieldByte2Flags
     PLAYER_FIELD_BYTE2_INVISIBILITY_GLOW = 0x40
 };
 
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_8_4
+enum WhoListPartyStatus
+{
+    WHO_PARTY_STATUS_NOT_IN_PARTY = 0x0,
+    WHO_PARTY_STATUS_IN_PARTY     = 0x1,
+    WHO_PARTY_STATUS_LFG          = 0x2
+};
+#endif
+
 enum ActivateTaxiReplies
 {
     ERR_TAXIOK                      = 0,
@@ -388,7 +397,7 @@ enum PlayerCheatOptions : uint16
     PLAYER_CHEAT_NO_COOLDOWN     = 0x002,
     PLAYER_CHEAT_NO_CAST_TIME    = 0x004,
     PLAYER_CHEAT_NO_POWER        = 0x008,
-    PLAYER_CHEAT_IMMUNE_AURA     = 0x010,
+    PLAYER_CHEAT_DEBUFF_IMMUNITY = 0x010,
     PLAYER_CHEAT_ALWAYS_CRIT     = 0x020,
     PLAYER_CHEAT_NO_CHECK_CAST   = 0x040,
     PLAYER_CHEAT_ALWAYS_PROC     = 0x080,
@@ -636,7 +645,7 @@ struct InstancePlayerBind
 
 #define MAX_INSTANCE_PER_ACCOUNT_PER_HOUR 5
 
-class MANGOS_DLL_SPEC PlayerTaxi
+class PlayerTaxi
 {
     public:
         PlayerTaxi();
@@ -806,7 +815,7 @@ struct RacialSpells
     uint32 spells[MAX_RACIAL_SPELLS] = { 0 };
 };
 
-class MovementAnticheatInterface;
+class MovementAnticheat;
 
 struct AuraSaveStruct
 {
@@ -842,7 +851,7 @@ struct ScheduledTeleportData
     std::function<void()> recover = std::function<void()>();
 };
 
-class MANGOS_DLL_SPEC Player final: public Unit
+class Player final: public Unit
 {
     friend class WorldSession;
     friend void Item::AddToUpdateQueueOf(Player* player);
@@ -909,7 +918,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void SetCheatNoCooldown(bool on, bool notify = false);
         void SetCheatInstantCast(bool on, bool notify = false);
         void SetCheatNoPowerCost(bool on, bool notify = false);
-        void SetCheatImmuneToAura(bool on, bool notify = false);
+        void SetCheatDebuffImmunity(bool on, bool notify = false);
         void SetCheatAlwaysCrit(bool on, bool notify = false);
         void SetCheatNoCastCheck(bool on, bool notify = false);
         void SetCheatAlwaysProc(bool on, bool notify = false);
@@ -1035,6 +1044,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void AutoUnequipWeaponsIfNeed();
         void AutoUnequipOffhandIfNeed();
         void AutoUnequipItemFromSlot(uint32 slot);
+        void SatisfyItemRequirements(ItemPrototype const* pItem);
         bool StoreNewItemInBestSlots(uint32 item_id, uint32 item_count, uint32 enchantId = 0);
         Item* StoreNewItemInInventorySlot(uint32 itemEntry, uint32 amount);
         void AutoStoreLoot(Loot& loot, bool broadcast = false, uint8 bag = NULL_BAG, uint8 slot = NULL_SLOT);
@@ -1146,7 +1156,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void SendPreparedGossip(WorldObject* pSource);
         void OnGossipSelect(WorldObject* pSource, uint32 gossipListId);
 
-        uint32 GetGossipTextId(uint32 menuId, WorldObject const* source) const;
+        uint32 GetGossipTextId(uint32 menuId, WorldObject* pSource);
         static uint32 GetGossipTextId(WorldObject* pSource);
         PlayerMenu* PlayerTalkClass;
 
@@ -1207,6 +1217,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void RewardQuest(Quest const* pQuest, uint32 reward, WorldObject* questGiver, bool announce = true);
         void FailQuest(uint32 quest_id);
         bool SatisfyQuestSkill(Quest const* qInfo, bool msg) const;
+        bool SatisfyQuestCondition(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestLevel(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestLog(bool msg) const;
         bool SatisfyQuestPreviousQuest(Quest const* qInfo, bool msg) const;
@@ -1265,7 +1276,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void SendCanTakeQuestResponse(uint32 msg) const;
         void SendQuestConfirmAccept(Quest const* pQuest, Player* pReceiver) const;
         void SendPushToPartyResponse(Player* pPlayer, uint8 msg) const;
-        void SendQuestUpdateAddItem(Quest const* pQuest, uint32 item_idx, uint32 count) const;
+        void SendQuestUpdateAddItem(Quest const* pQuest, uint32 item_idx, uint32 current, uint32 count);
         void SendQuestUpdateAddCreatureOrGo(Quest const* pQuest, ObjectGuid guid, uint32 creatureOrGO_idx, uint32 count);
 
         ObjectGuid GetDividerGuid() const { return m_dividerGuid; }
@@ -1314,6 +1325,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         bool HasAtLoginFlag(AtLoginFlags f) const { return m_atLoginFlags & f; }
         void SetAtLoginFlag(AtLoginFlags f) { m_atLoginFlags |= f; }
         void RemoveAtLoginFlag(AtLoginFlags f, bool in_db_also = false);
+        static bool ValidateAppearance(uint8 race, uint8 class_, uint8 gender, uint8 hairID, uint8 hairColor, uint8 faceID, uint8 facialHair, uint8 skinColor, bool create = false);
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -1391,9 +1403,8 @@ class MANGOS_DLL_SPEC Player final: public Unit
         float m_auraBaseMod[BASEMOD_END][MOD_END];
         SpellModList m_spellMods[MAX_SPELLMOD];
         uint32 m_lastFromClientCastedSpellID;
-        void _LoadSpellCooldowns(QueryResult* result);
-        void _SaveSpellCooldowns();
-
+        
+        
         bool IsNeedCastPassiveLikeSpellAtLearn(SpellEntry const* spellInfo) const;
         void SendInitialSpells() const;
         bool AddSpell(uint32 spell_id, bool active, bool learning, bool dependent, bool disabled);
@@ -1403,12 +1414,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         TrainerSpellState GetTrainerSpellState(TrainerSpell const* trainer_spell) const;
         bool IsSpellFitByClassAndRace(uint32 spell_id, uint32* pReqlevel = nullptr) const;
         bool IsImmuneToSpellEffect(SpellEntry const* spellInfo, SpellEffectIndex index, bool castOnSelf) const override;
-        void ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs) override;
-        void SendClearCooldown(uint32 spell_id, Unit* target) const;
-        void SendClearAllCooldowns(Unit* target) const;
-        void SendSpellCooldown(uint32 spellId, uint32 cooldown, ObjectGuid target) const;
         void SendSpellRemoved(uint32 spell_id) const;
-
         void LearnSpell(uint32 spell_id, bool dependent, bool talent = false);
         void RemoveSpell(uint32 spell_id, bool disabled = false, bool learn_low_rank = true);
         void ResetSpells();
@@ -1433,6 +1439,37 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void RestoreSpellMods(Spell* spell, uint32 ownerAuraId = 0, Aura* aura = nullptr);
         void RestoreAllSpellMods(uint32 ownerAuraId = 0, Aura* aura = nullptr);
         void DropModCharge(SpellModifier* mod, Spell* spell);
+
+        // cooldown system
+        virtual void AddGCD(SpellEntry const& spellEntry, uint32 forcedDuration = 0, bool updateClient = false) override;
+        virtual void AddCooldown(SpellEntry const& spellEntry, ItemPrototype const* itemProto = nullptr, bool permanent = false, uint32 forcedDuration = 0) override;
+        virtual void RemoveSpellCooldown(SpellEntry const& spellEntry, bool updateClient = true) override;
+        virtual void RemoveSpellCategoryCooldown(uint32 category, bool updateClient = true) override;
+        virtual void RemoveAllCooldowns(bool sendOnly = false);
+        virtual void LockOutSpells(SpellSchoolMask schoolMask, uint32 duration) override;
+        void RemoveSpellLockout(SpellSchoolMask spellSchoolMask, std::set<uint32>* spellAlreadySent = nullptr);
+        void SendClearCooldown(uint32 spell_id, Unit* target) const;
+        void SendClearAllCooldowns(Unit* target) const;
+        void SendSpellCooldown(uint32 spellId, uint32 cooldown, ObjectGuid target) const;
+        void _LoadSpellCooldowns(QueryResult* result);
+        void _SaveSpellCooldowns();
+
+        template <typename F>
+        void RemoveSomeCooldown(F check)
+        {
+            auto spellCDItr = m_cooldownMap.begin();
+            while (spellCDItr != m_cooldownMap.end())
+            {
+                SpellEntry const* entry = sSpellMgr.GetSpellEntry(spellCDItr->first);
+                if (entry && check(*entry))
+                {
+                    SendClearCooldown(spellCDItr->first, this);
+                    spellCDItr = m_cooldownMap.erase(spellCDItr);
+                }
+                else
+                    ++spellCDItr;
+            }
+        }
 
         std::vector<ItemSetEffect*> m_ItemSetEff;
         uint32 m_castingSpell; // Last spell cast by client, or combo points if player is rogue
@@ -1755,7 +1792,6 @@ class MANGOS_DLL_SPEC Player final: public Unit
         bool SetPosition(float x, float y, float z, float orientation, bool teleport = false);
         void SetBindPoint(ObjectGuid guid) const;
 
-        void BuildTeleportAckMsg(WorldPacket& data, float x, float y, float z, float ang) const;
         WorldLocation& GetTeleportDest() { return m_teleport_dest; }
         bool IsBeingTeleported() const { return mSemaphoreTeleport_Near || mSemaphoreTeleport_Far || mPendingFarTeleport; }
         bool IsBeingTeleportedNear() const { return mSemaphoreTeleport_Near; }
@@ -1854,6 +1890,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         uint32 GetHomeBindMap() const { return m_homebindMapId; }
         uint16 GetHomeBindAreaId() const { return m_homebindAreaId; }
 
+        void SendSummonRequest(ObjectGuid summonerGuid, uint32 mapId, uint32 zoneId, float x, float y, float z);
         void SetSummonPoint(uint32 mapid, float x, float y, float z)
         {
             m_summon_expire = time(nullptr) + MAX_PLAYER_SUMMON_DELAY;
@@ -1998,13 +2035,13 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void SetCannotBeDetectedTimer(uint32 milliseconds) { m_cannotBeDetectedTimer = milliseconds; };
         bool CanBeDetected() const override { return m_cannotBeDetectedTimer <= 0; }
 
-        // Nostalrius
-        // Gestion des PlayerAI
+        // PlayerAI management
         PlayerAI* i_AI;
         PlayerAI* AI() { return i_AI; }
-        void setAI(PlayerAI* otherAI) { i_AI = otherAI; }
+        void SetAI(PlayerAI* otherAI) { i_AI = otherAI; }
         void SetControlledBy(Unit* Who);
         void RemoveAI();
+        void RemoveTemporaryAI(); // will restore player bot AI if needed
         void ModPossessPet(Pet* pet, bool apply, AuraRemoveMode m_removeMode = AURA_REMOVE_BY_DEFAULT);
 
         void SetDeathState(DeathState s) override;                   // overwrite Unit::SetDeathState
@@ -2074,10 +2111,12 @@ class MANGOS_DLL_SPEC Player final: public Unit
         UnitDismountResult Unmount(bool from_aura = false) override;
 
         bool CanInteractWithQuestGiver(Object* questGiver) const;
+        Creature* FindNearestInteractableNpcWithFlag(uint32 npcFlags) const;
         Creature* GetNPCIfCanInteractWith(ObjectGuid guid, uint32 npcflagmask) const;
-        bool CanInteractWithNPC(Creature* pCreature, uint32 npcflagmask) const;
+        bool CanInteractWithNPC(Creature const* pCreature, uint32 npcflagmask) const;
         GameObject* GetGameObjectIfCanInteractWith(ObjectGuid guid, uint32 gameobject_type = MAX_GAMEOBJECT_TYPE) const;
-        bool CanInteractWithGameObject(GameObject* pGo, uint32 gameobject_type = MAX_GAMEOBJECT_TYPE) const;
+        bool CanInteractWithGameObject(GameObject const* pGo, uint32 gameobject_type = MAX_GAMEOBJECT_TYPE) const;
+        bool CanSeeHealthOf(Unit const* pTarget) const;
 
         ObjectGuid const& GetSelectedGobj() const { return m_selectedGobj; }
         void SetSelectedGobj(ObjectGuid guid) { m_selectedGobj = guid; }
@@ -2101,6 +2140,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void ClearResurrectRequestData() { SetResurrectRequestData(ObjectGuid(), 0, 0.0f, 0.0f, 0.0f, 0, 0); }
         bool IsRessurectRequestedBy(ObjectGuid guid) const { return m_resurrectGuid == guid; }
         bool IsRessurectRequested() const { return !m_resurrectGuid.IsEmpty(); }
+        ObjectGuid const& GetResurrector() const { return m_resurrectGuid; }
         void ResurectUsingRequestData();
 
         static bool IsActionButtonDataValid(uint8 button, uint32 action, uint8 type, Player* player);
@@ -2367,7 +2407,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         bool FallGround(uint8 fallMode);
 
         /// Anticheat
-        MovementAnticheatInterface* GetCheatData() const { return m_session->GetCheatData(); }
+        MovementAnticheat* GetCheatData() const { return m_session->GetCheatData(); }
         void OnDisconnected();
         void RelocateToLastClientPosition();
         void GetSafePosition(float &x, float &y, float &z, Transport* onTransport = nullptr) const override;
@@ -2454,6 +2494,10 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void RemoveFromGroup() { RemoveFromGroup(GetGroup(), GetObjectGuid()); }
         void SendUpdateToOutOfRangeGroupMembers();
         void SendDestroyGroupMembers(bool includingSelf = false);
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_8_4
+        uint32 GetWhoListPartyStatus() const;
+#endif
 
         // BattleGround Group System
         void SetBattleGroundRaid(Group* group, int8 subgroup = -1);

@@ -32,8 +32,9 @@ INSERT INTO `creature_template` (`entry`, `patch`, `display_id1`, `display_id2`,
 (90027, 0, 7209, 0, 0, 0, 'Enchants 1', '', 0, 60, 60, 1337, 1337, 0, 0, 3252, 35, 16388, 1, 1.14286, 1, 20, 5, 0, 1, 1, 42, 53, 0, 122, 1, 2000, 2000, 1, 2, 0, 0, 0, 0, 0, 0, 45.144, 62.073, 100, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 3, 0, 0, 3, 0, 0, 0, 0, 0, 64, ''),
 (90028, 0, 7209, 0, 0, 0, 'Enchants 2', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_enchant_npc'),
 (90029, 0, 7209, 0, 0, 0, 'Professions', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_professions_npc'),
-(90030, 0, 7217, 0, 0, 0, 'Premade Gear', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_premade_gear_npc'),
-(90031, 0, 7217, 0, 0, 0, 'Premade Specs', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_premade_spec_npc');
+(90030, 0, 104, 0, 0, 0, 'Premade Gear', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_premade_gear_npc'),
+(90031, 0, 18, 0, 0, 0, 'Premade Specs', '', 0, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, 'custom_premade_spec_npc'),
+(90032, 0, 108, 0, 0, 0, 'World Buffs', 'Player Test Realm', 13500, 50, 50, 4000, 5000, 200, 300, 200, 35, 1, 1, 1.14286, 1.5, 20, 5, 0, 1, 1, 687, 967, 0, 226, 1, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 2, '');
 -- NPC_TRAINER
 INSERT INTO `npc_trainer` (`entry`, `spell`, `spellcost`, `reqskill`, `reqskillvalue`, `reqlevel`) VALUES (90000, 499, 0, 0, 0, 20);
 INSERT INTO `npc_trainer` (`entry`, `spell`, `spellcost`, `reqskill`, `reqskillvalue`, `reqlevel`) VALUES (90000, 1151, 0, 0, 0, 26);
@@ -2253,51 +2254,68 @@ INSERT INTO `npc_vendor` (`entry`, `item`, `maxcount`, `incrtime`) VALUES
 (90027, 11642, 0, 0),
 (90027, 11622, 0, 0);
 -- CREATURE
-INSERT INTO `creature` (`guid`, `id`, `map`, `modelid`, `equipment_id`, `position_x`, `position_y`, `position_z`, `orientation`, `spawntimesecsmin`, `spawntimesecsmax`, `spawndist`, `currentwaypoint`, `curhealth`, `curmana`, `DeathState`, `MovementType`, `spawnFlags`, `visibilitymod`, `patch_min`, `patch_max`) VALUES 
-(2000000, 90000, 1, 0, 0, 16269.5, 16315.1, 14.0968, 6.2399, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000001, 90001, 1, 0, 0, 16269.6, 16317.7, 14.0951, 6.26817, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000002, 90002, 1, 0, 0, 16269.3, 16312.6, 14.0314, 6.12923, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000003, 90003, 1, 0, 0, 16269.1, 16309.7, 14.0994, 6.21091, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000004, 90004, 1, 0, 0, 16268.9, 16307.3, 14.1763, 6.1465, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000005, 90005, 1, 0, 0, 16268.7, 16304.9, 14.2956, 6.14488, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000006, 90006, 1, 0, 0, 16268.4, 16302.4, 14.5802, 6.1425, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000007, 90007, 1, 0, 0, 16268.3, 16300.1, 14.7637, 6.15035, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000008, 90008, 1, 0, 0, 16268.1, 16298.1, 15.001, 6.16998, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000009, 90009, 1, 0, 0, 16268.6, 16311, 14.1163, 6.1891, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000010, 90010, 1, 0, 0, 16270, 16320.4, 14.1648, 6.16611, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000011, 90011, 1, 0, 0, 16264.1, 16326.2, 13.2077, 1.46903, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000012, 90012, 1, 0, 0, 16261.5, 16326.4, 13.0358, 1.42662, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000013, 90013, 1, 0, 0, 16258.8, 16326.7, 12.9362, 1.48553, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000014, 90014, 1, 0, 0, 16256.1, 16327, 12.9211, 1.45175, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000015, 90015, 1, 0, 0, 16253.3, 16327.3, 12.9214, 1.40855, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000016, 90016, 1, 0, 0, 16250.6, 16327.7, 12.9226, 1.45857, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000017, 90017, 1, 0, 0, 16247.5, 16328, 12.9237, 1.39573, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000018, 90018, 1, 0, 0, 16268, 16303.3, 14.5523, 6.27236, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000019, 90019, 1, 0, 0, 16246.6, 16279.6, 14.0497, 4.91576, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000020, 90020, 1, 0, 0, 16249.3, 16279.9, 13.9174, 4.93932, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000021, 90021, 1, 0, 0, 16251.7, 16280.3, 14.0546, 4.9511, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000022, 90022, 1, 0, 0, 16269.7, 16322.5, 14.0319, 6.22892, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000023, 90023, 1, 0, 0, 16270.3, 16335, 13.0794, 5.68233, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000024, 90024, 1, 0, 0, 16250.8, 16345.2, 13.9847, 4.68961, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000025, 90025, 1, 0, 0, 16197.8, 16288.6, 11.4417, 0.378564, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000026, 20008, 1, 0, 0, 16218.9, 16283.9, 13.1778, 6.19358, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000027, 90026, 1, 0, 0, 16260.8, 16283.9, 14.8696, 5.26714, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000028, 90027, 1, 0, 0, 16262.7, 16285.6, 14.4146, 5.55223, 120, 120, 0, 0, 100, 0, 0, 0, 0, 0, 0, 10),
-(2000029, 90028, 1, 0, 0, 16264.3, 16287.8, 14.1814, 5.77999, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000030, 90029, 1, 0, 0, 16265.5, 16289.7, 14.3128, 5.94021, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000031, 90030, 1, 0, 0, 16281.7, 16296.9, 12.8599, 2.36683, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10),
-(2000032, 90031, 1, 0, 0, 16283.5, 16297.3, 12.7021, 1.94665, 120, 120, 0, 0, 100, 100, 0, 0, 0, 0, 0, 10);
+INSERT INTO `creature` (`guid`, `id`, `map`, `position_x`, `position_y`, `position_z`, `orientation`, `spawntimesecsmin`, `spawntimesecsmax`, `wander_distance`, `health_percent`, `mana_percent`, `movement_type`) VALUES 
+(2000000, 90000, 1, 16269.5, 16315.1, 14.0968, 6.2399, 120, 120, 0, 100, 100, 0),
+(2000001, 90001, 1, 16269.6, 16317.7, 14.0951, 6.26817, 120, 120, 0, 100, 100, 0),
+(2000002, 90002, 1, 16269.3, 16312.6, 14.0314, 6.12923, 120, 120, 0, 100, 100, 0),
+(2000003, 90003, 1, 16269.1, 16309.7, 14.0994, 6.21091, 120, 120, 0, 100, 100, 0),
+(2000004, 90004, 1, 16268.9, 16307.3, 14.1763, 6.1465, 120, 120, 0, 100, 100, 0),
+(2000005, 90005, 1, 16268.7, 16304.9, 14.2956, 6.14488, 120, 120, 0, 100, 100, 0),
+(2000006, 90006, 1, 16268.4, 16302.4, 14.5802, 6.1425, 120, 120, 0, 100, 0, 0),
+(2000007, 90007, 1, 16268.3, 16300.1, 14.7637, 6.15035, 120, 120, 0, 100, 100, 0),
+(2000008, 90008, 1, 16268.1, 16298.1, 15.001, 6.16998, 120, 120, 0, 100, 0, 0),
+(2000009, 90009, 1, 16268.6, 16311, 14.1163, 6.1891, 120, 120, 0, 100, 100, 0),
+(2000010, 90010, 1, 16270, 16320.4, 14.1648, 6.16611, 120, 120, 0, 100, 0, 0),
+(2000011, 90011, 1, 16264.1, 16326.2, 13.2077, 1.46903, 120, 120, 0, 100, 0, 0),
+(2000012, 90012, 1, 16261.5, 16326.4, 13.0358, 1.42662, 120, 120, 0, 100, 0, 0),
+(2000013, 90013, 1, 16258.8, 16326.7, 12.9362, 1.48553, 120, 120, 0, 100, 0, 0),
+(2000014, 90014, 1, 16256.1, 16327, 12.9211, 1.45175, 120, 120, 0, 100, 0, 0),
+(2000015, 90015, 1, 16253.3, 16327.3, 12.9214, 1.40855, 120, 120, 0, 100, 0, 0),
+(2000016, 90016, 1, 16250.6, 16327.7, 12.9226, 1.45857, 120, 120, 0, 100, 0, 0),
+(2000017, 90017, 1, 16247.5, 16328, 12.9237, 1.39573, 120, 120, 0, 100, 0, 0),
+(2000018, 90018, 1, 16268, 16303.3, 14.5523, 6.27236, 120, 120, 0, 100, 0, 0),
+(2000019, 90019, 1, 16246.6, 16279.6, 14.0497, 4.91576, 120, 120, 0, 100, 0, 0),
+(2000020, 90020, 1, 16249.3, 16279.9, 13.9174, 4.93932, 120, 120, 0, 100, 0, 0),
+(2000021, 90021, 1, 16251.7, 16280.3, 14.0546, 4.9511, 120, 120, 0, 100, 0, 0),
+(2000022, 90022, 1, 16269.7, 16322.5, 14.0319, 6.22892, 120, 120, 0, 100, 0, 0),
+(2000023, 90023, 1, 16270.3, 16335, 13.0794, 5.68233, 120, 120, 0, 100, 0, 0),
+(2000024, 90024, 1, 16250.8, 16345.2, 13.9847, 4.68961, 120, 120, 0, 100, 0, 0),
+(2000025, 90025, 1, 16197.8, 16288.6, 11.4417, 0.378564, 120, 120, 0, 100, 0, 0),
+(2000026, 20008, 1, 16218.9, 16283.9, 13.1778, 6.19358, 120, 120, 0, 100, 100, 0),
+(2000027, 90026, 1, 16260.8, 16283.9, 14.8696, 5.26714, 120, 120, 0, 100, 0, 0),
+(2000028, 90027, 1, 16262.7, 16285.6, 14.4146, 5.55223, 120, 120, 0, 100, 0, 0),
+(2000029, 90028, 1, 16264.3, 16287.8, 14.1814, 5.77999, 120, 120, 0, 100, 100, 0),
+(2000030, 90029, 1, 16265.5, 16289.7, 14.3128, 5.94021, 120, 120, 0, 100, 100, 0),
+(2000031, 90030, 1, 16281.7, 16296.9, 12.8599, 2.36683, 120, 120, 0, 100, 100, 0),
+(2000032, 90031, 1, 16283.5, 16297.3, 12.7021, 1.94665, 120, 120, 0, 100, 100, 0),
+(2000033, 90032, 1, 16228.8, 16283, 13.1756, 3.04135, 120, 120, 0, 100, 100, 0);
 -- NPC_TEXT
 INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90000, 99990, 1);
-INSERT INTO `broadcast_text` (`ID`, `MaleText`, `FemaleText`) VALUES (99990, 'Greetings $N. Enjoying the vendors?\r\n\r\nVisit my channel for more fun stuff:\r\nwww.youtube.com/brotalnia', 'Greetings $N. Enjoying the vendors?\r\n\r\nVisit my channel for more fun stuff:\r\nwww.youtube.com/brotalnia');
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99990, 'Greetings $N. Enjoying the vendors?\r\n\r\nVisit my channel for more fun stuff:\r\nwww.youtube.com/brotalnia', 'Greetings $N. Enjoying the vendors?\r\n\r\nVisit my channel for more fun stuff:\r\nwww.youtube.com/brotalnia');
 INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90001, 99991, 1);
-INSERT INTO `broadcast_text` (`ID`, `MaleText`, `FemaleText`) VALUES (99991, 'What would you like to enchant?', 'What would you like to enchant?');
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99991, 'What would you like to enchant?', 'What would you like to enchant?');
 INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90002, 99992, 1);
-INSERT INTO `broadcast_text` (`ID`, `MaleText`, `FemaleText`) VALUES (99992, 'Select a profession to learn all recipes.', 'Select a profession to learn all recipes.');
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99992, 'Select a profession to learn all recipes.', 'Select a profession to learn all recipes.');
 INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90003, 99993, 1);
-INSERT INTO `broadcast_text` (`ID`, `MaleText`, `FemaleText`) VALUES (99993, 'Select the premade gear template you want to equip.', 'Select premade gear template you want to equip.');
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99993, 'Select the premade gear template you want to equip.', 'Select premade gear template you want to equip.');
 INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90004, 99994, 1);
-INSERT INTO `broadcast_text` (`ID`, `MaleText`, `FemaleText`) VALUES (99994, 'Select the premade spec template you want to apply.', 'Select premade spec template you want to apply.');
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99994, 'Select the premade spec template you want to apply.', 'Select premade spec template you want to apply.');
+INSERT INTO `npc_text` (`ID`, `BroadcastTextID0`, `Probability0`) VALUES (90005, 99995, 1);
+INSERT INTO `broadcast_text` (`entry`, `male_text`, `female_text`) VALUES (99995, 'You\'re a wizard, $n!', 'You\'re a wizard, $n!');
+-- GOSSIP_MENU
+INSERT INTO `gossip_menu` VALUES (13500, 90005, 0);
+-- GOSSIP_MENU_OPTION
+INSERT INTO `gossip_menu_option` (`menu_id`, `id`, `option_icon`, `option_text`, `option_id`, `npc_option_npcflag`, `action_menu_id`, `action_poi_id`, `action_script_id`, `box_coded`, `box_money`, `box_text`, `condition_id`) VALUES (13500, 0, 0, 'I\'m a what?', 1, 1, -1, 0, 13500, 0, 0, NULL, 0);
+-- GOSSIP_SCRIPTS
+DELETE FROM `gossip_scripts` WHERE `id`=13500;
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 24425, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Spirit of Zandalar');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 22888, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Rallying Cry of the Dragonslayer');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 15366, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Songflower Serenade');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 16609, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Warchief\'s Blessing');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 22818, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Mol\'dar\'s Moxie');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 22817, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Fengus\' Ferocity');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 74, 22820, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Add Aura Slip\'kik\'s Savvy');
+INSERT INTO `gossip_scripts` (`id`, `delay`, `command`, `datalong`, `datalong2`, `datalong3`, `datalong4`, `target_param1`, `target_param2`, `target_type`, `data_flags`, `dataint`, `dataint2`, `dataint3`, `dataint4`, `x`, `y`, `z`, `o`, `condition_id`, `comments`) VALUES (13500, 0, 16, 7594, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'World Buffs - Play Sound');
 -- NPC_GOSSIP
 INSERT INTO `npc_gossip` (`npc_guid`, `textid`) VALUES (2000000, 90000);
 INSERT INTO `npc_gossip` (`npc_guid`, `textid`) VALUES (2000001, 90000);

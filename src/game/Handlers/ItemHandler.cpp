@@ -350,8 +350,10 @@ void WorldSession::HandleItemQuerySingleOpcode(WorldPacket& recv_data)
             data << pProto->RequiredHonorRank;
 
         data << pProto->RequiredCityRank;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_6_1
         data << pProto->RequiredReputationFaction;
         data << (pProto->RequiredReputationFaction > 0  ? pProto->RequiredReputationRank : 0);   // send value only if reputation faction id setted (needed for some items)
+#endif
         data << pProto->MaxCount;
         data << pProto->Stackable;
         data << pProto->ContainerSlots;
@@ -769,7 +771,7 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid, uint8 menu_type)
         GetPlayer()->RemoveSpellsCausingAura(SPELL_AURA_FEIGN_DEATH);
 
     // Stop the npc if moving
-    if (!pCreature->IsStopped())
+    if (!pCreature->IsStopped() && !pCreature->HasExtraFlag(CREATURE_FLAG_EXTRA_NO_MOVEMENT_PAUSE))
         pCreature->StopMoving();
 
     VendorItemData const* vItems = menu_type & VENDOR_MENU_NORMAL ? pCreature->GetVendorItems() : nullptr;
@@ -819,6 +821,9 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid, uint8 menu_type)
                     // when no faction required but rank > 0 will be used faction id from the vendor faction template to compare the rank
                     if (!pProto->RequiredReputationFaction && pProto->RequiredReputationRank > 0 &&
                             ReputationRank(pProto->RequiredReputationRank) > _player->GetReputationRank(pCreature->getFactionTemplateEntry()->faction))
+                        continue;
+
+                    if (crItem->conditionId && !sObjectMgr.IsConditionSatisfied(crItem->conditionId, _player, pCreature->GetMap(), pCreature, CONDITION_FROM_VENDOR))
                         continue;
                 }
 

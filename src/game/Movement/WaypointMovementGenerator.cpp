@@ -224,16 +224,16 @@ void WaypointMovementGenerator<Creature>::StartMove(Creature &creature)
     }
 
     m_isArrivalDone = false;
-
     creature.AddUnitState(UNIT_STAT_ROAMING_MOVE);
 
     WaypointNode const& nextNode = currPoint->second;
-    creature.SetWalk(!creature.HasUnitState(UNIT_STAT_RUNNING) && !creature.IsLevitating(), false);
     Movement::MoveSplineInit init(creature, "WaypointMovementGenerator<Creature>::StartMove");
     init.MoveTo(nextNode.x, nextNode.y, nextNode.z, (m_PathOrigin == PATH_FROM_SPECIAL) ? MOVE_STRAIGHT_PATH : MOVE_PATHFINDING);
 
     if (nextNode.orientation != 100 && nextNode.delay != 0)
         init.SetFacing(nextNode.orientation);
+
+    creature.SetWalk(!creature.HasUnitState(UNIT_STAT_RUNNING) && !creature.IsLevitating(), false);
     init.Launch();
 }
 
@@ -263,8 +263,8 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, uint32 cons
             Stop(STOP_TIME_FOR_PLAYER);
         else if (creature.movespline->Finalized())
         {
-            if (OnArrived(creature))
-                StartMove(creature);
+            if (OnArrived(creature))        // fire script events
+                StartMove(creature);        // restart movement if needed
         }
     }
     return true;

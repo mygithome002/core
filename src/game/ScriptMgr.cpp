@@ -41,6 +41,7 @@ ScriptMapMap sSpellScripts;
 ScriptMapMap sCreatureSpellScripts;
 ScriptMapMap sGameObjectScripts;
 ScriptMapMap sEventScripts;
+ScriptMapMap sGenericScripts;
 ScriptMapMap sGossipScripts;
 ScriptMapMap sCreatureMovementScripts;
 ScriptMapMap sCreatureAIScripts;
@@ -249,10 +250,18 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, char const* tablename)
             }
             case SCRIPT_COMMAND_EMOTE:
             {
-                if (!sEmotesStore.LookupEntry(tmp.emote.emoteId))
+                if (!sEmotesStore.LookupEntry(tmp.emote.emoteId[0]))
                 {
-                    sLog.outErrorDb("Table `%s` has invalid emote id (datalong = %u) in SCRIPT_COMMAND_EMOTE for script id %u", tablename, tmp.emote.emoteId, tmp.id);
+                    sLog.outErrorDb("Table `%s` has invalid emote id (datalong = %u) in SCRIPT_COMMAND_EMOTE for script id %u", tablename, tmp.emote.emoteId[0], tmp.id);
                     continue;
+                }
+                for (uint32 i = 1; i < MAX_EMOTE_ID; i++)
+                {
+                    if (tmp.emote.emoteId[i] && !sEmotesStore.LookupEntry(tmp.emote.emoteId[i]))
+                    {
+                        sLog.outErrorDb("Table `%s` has invalid emote id (datalong%u = %u) in SCRIPT_COMMAND_EMOTE for script id %u", tablename, i, tmp.emote.emoteId[i], tmp.id);
+                        tmp.emote.emoteId[i] = 0;
+                    }
                 }
                 break;
             }
@@ -405,9 +414,7 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, char const* tablename)
 
                     if (info->type == GAMEOBJECT_TYPE_FISHINGNODE ||
                         info->type == GAMEOBJECT_TYPE_FISHINGHOLE ||
-                        info->type == GAMEOBJECT_TYPE_DOOR ||
-                        info->type == GAMEOBJECT_TYPE_BUTTON ||
-                        info->type == GAMEOBJECT_TYPE_TRAP)
+                        info->type == GAMEOBJECT_TYPE_DOOR)
                     {
                         sLog.outErrorDb("Table `%s` have gameobject type (%u) unsupported by command SCRIPT_COMMAND_RESPAWN_GAMEOBJECT for script id %u", tablename, info->id, tmp.id);
                         continue;
@@ -1192,6 +1199,55 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, char const* tablename)
                 }
                 break;
             }
+            case SCRIPT_COMMAND_DESPAWN_GAMEOBJECT:
+            {
+                if (tmp.GetGOGuid()) // cant check when using buddy\source\target instead
+                {
+                    GameObjectData const* data = sObjectMgr.GetGOData(tmp.GetGOGuid());
+                    if (!data)
+                    {
+                        if (!sObjectMgr.IsExistingGameObjectGuid(tmp.GetGOGuid()))
+                        {
+                            sLog.outErrorDb("Table `%s` has invalid gameobject (GUID: %u) in SCRIPT_COMMAND_DESPAWN_GAMEOBJECT for script id %u", tablename, tmp.GetGOGuid(), tmp.id);
+                            continue;
+                        }
+                        else
+                        {
+                            DisableScriptAction(tmp);
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+            case SCRIPT_COMMAND_LOAD_GAMEOBJECT:
+            {
+                GameObjectData const* data = sObjectMgr.GetGOData(tmp.GetGOGuid());
+                if (!data)
+                {
+                    if (!sObjectMgr.IsExistingGameObjectGuid(tmp.GetGOGuid()))
+                    {
+                        sLog.outErrorDb("Table `%s` has invalid gameobject (GUID: %u) in SCRIPT_COMMAND_LOAD_GAMEOBJECT for script id %u", tablename, tmp.GetGOGuid(), tmp.id);
+                        continue;
+                    }
+                    else
+                    {
+                        DisableScriptAction(tmp);
+                        break;
+                    }
+                }
+                break;
+            }
+            case SCRIPT_COMMAND_SET_GOSSIP_MENU:
+            {
+                if (tmp.setGossipMenu.gossipMenuId && !sObjectMgr.IsExistingGossipMenuId(tmp.setGossipMenu.gossipMenuId))
+                {
+                    sLog.outErrorDb("Table `%s` using nonexistent gossip menu (id: %u) in SCRIPT_COMMAND_SET_GOSSIP_MENU for script id %u",
+                        tablename, tmp.setGossipMenu.gossipMenuId, tmp.id);
+                    continue;
+                }
+                break;
+            }
         }
 
         if (scripts.find(tmp.id) == scripts.end())
@@ -1299,6 +1355,30 @@ void ScriptMgr::LoadSpellScripts()
     }
 }
 
+void ScriptMgr::LoadGenericScripts()
+{
+    LoadScripts(sGenericScripts, "generic_scripts");
+
+    std::set<uint32> genericIds;                            // Store possible event ids
+    CollectPossibleGenericIds(genericIds);
+
+    // Then check if all scripts are in above list of possible script entries.
+    for (const auto& itr : sGenericScripts)
+    {
+        auto const itr2 = genericIds.find(itr.first);
+        if (itr2 == genericIds.end())
+            sLog.outErrorDb("Table `generic_scripts` has script (Id: %u) not referenced from anywhere", itr.first);
+    }
+
+    // Check if any generic script ids are missing.
+    for (uint32 id : genericIds)
+    {
+        auto const itr = sGenericScripts.find(id);
+        if (itr == sGenericScripts.end())
+            sLog.outErrorDb("Table `generic_scripts` does not contain script (Id: %u) referenced from another script", id);
+    }
+}
+
 void ScriptMgr::LoadEventScripts()
 {
     LoadScripts(sEventScripts, "event_scripts");
@@ -1399,6 +1479,7 @@ void ScriptMgr::CheckAllScriptTexts()
     CheckScriptTexts(sCreatureSpellScripts);
     CheckScriptTexts(sGameObjectScripts);
     CheckScriptTexts(sEventScripts);
+    CheckScriptTexts(sGenericScripts);
     CheckScriptTexts(sGossipScripts);
     CheckScriptTexts(sCreatureMovementScripts);
     CheckScriptTexts(sCreatureAIScripts);
@@ -1902,7 +1983,7 @@ void ScriptMgr::LoadDatabase()
 void ScriptMgr::LoadScriptTexts()
 {
     sLog.outString("Loading Script Texts...");
-    LoadMangosStrings(WorldDatabase, "script_texts", TEXT_SOURCE_TEXT_START, TEXT_SOURCE_TEXT_END, true);
+    sObjectMgr.LoadMangosStrings(WorldDatabase, "script_texts", TEXT_SOURCE_TEXT_START, TEXT_SOURCE_TEXT_END, true);
 
     QueryResult* result = WorldDatabase.PQuery("SELECT entry, sound, type, language, emote FROM script_texts WHERE entry BETWEEN %i AND %i", TEXT_SOURCE_TEXT_END, TEXT_SOURCE_TEXT_START);
 
@@ -1964,7 +2045,7 @@ void ScriptMgr::LoadScriptTexts()
 void ScriptMgr::LoadScriptTextsCustom()
 {
     sLog.outString("Loading Custom Texts...");
-    LoadMangosStrings(WorldDatabase, "custom_texts", TEXT_SOURCE_CUSTOM_START, TEXT_SOURCE_CUSTOM_END, true);
+    sObjectMgr.LoadMangosStrings(WorldDatabase, "custom_texts", TEXT_SOURCE_CUSTOM_START, TEXT_SOURCE_CUSTOM_END, true);
 
     QueryResult* result = WorldDatabase.PQuery("SELECT entry, sound, type, language, emote FROM custom_texts WHERE entry BETWEEN %i AND %i", TEXT_SOURCE_CUSTOM_END, TEXT_SOURCE_CUSTOM_START);
 
@@ -2061,7 +2142,7 @@ void ScriptMgr::LoadScriptWaypoints()
             pTemp.fZ                = pFields[4].GetFloat();
             pTemp.uiWaitTime        = pFields[5].GetUInt32();
 
-            CreatureInfo const* pCInfo = GetCreatureTemplateStore(pTemp.uiCreatureEntry);
+            CreatureInfo const* pCInfo = sObjectMgr.GetCreatureTemplate(pTemp.uiCreatureEntry);
 
             if (!pCInfo)
             {
@@ -2113,7 +2194,7 @@ void ScriptMgr::LoadEscortData()
             pTemp.uiQuestEntry       = pFields[1].GetUInt32();
             pTemp.uiEscortFaction    = pFields[2].GetUInt32();
 
-            CreatureInfo const* pCInfo = GetCreatureTemplateStore(pTemp.uiCreatureEntry);
+            CreatureInfo const* pCInfo = sObjectMgr.GetCreatureTemplate(pTemp.uiCreatureEntry);
 
             if (!pCInfo)
             {
@@ -2156,9 +2237,96 @@ void ScriptMgr::LoadEscortData()
     }
 }
 
+void ScriptMgr::CollectPossibleGenericIds(std::set<uint32>& genericIds)
+{
+    char const* script_tables[10] =
+    {
+        "creature_ai_scripts",
+        "creature_movement_scripts",
+        "creature_spells_scripts",
+        "event_scripts",
+        "generic_scripts",
+        "gossip_scripts",
+        "gameobject_scripts",
+        "spell_scripts",
+        "quest_end_scripts",
+        "quest_start_scripts"
+    };
+    Field* fields;
+    for (const auto& script_table : script_tables)
+    {
+        // From SCRIPT_COMMAND_START_SCRIPT.
+        std::unique_ptr<QueryResult> result(WorldDatabase.PQuery("SELECT `datalong`, `datalong2`, `datalong3`, `datalong4` FROM `%s` WHERE `command`=39", script_table));
+
+        if (result)
+        {
+            do
+            {
+                fields = result->Fetch();
+                uint32 script1 = fields[0].GetUInt32();
+                if (script1)
+                    genericIds.insert(script1);
+                uint32 script2 = fields[1].GetUInt32();
+                if (script2)
+                    genericIds.insert(script2);
+                uint32 script3 = fields[2].GetUInt32();
+                if (script3)
+                    genericIds.insert(script3);
+                uint32 script4 = fields[3].GetUInt32();
+                if (script4)
+                    genericIds.insert(script4);
+            } while (result->NextRow());
+        }
+
+        // From SCRIPT_COMMAND_TEMP_SUMMON_CREATURE.
+        result.reset(WorldDatabase.PQuery("SELECT `dataint2` FROM `%s` WHERE `command`=10 && `dataint2`!=0", script_table));
+
+        if (result)
+        {
+            do
+            {
+                fields = result->Fetch();
+                uint32 script1 = fields[0].GetUInt32();
+                if (script1)
+                    genericIds.insert(script1);
+            } while (result->NextRow());
+        }
+
+        // From SCRIPT_COMMAND_START_SCRIPT_FOR_ALL.
+        result.reset(WorldDatabase.PQuery("SELECT `datalong` FROM `%s` WHERE `command`=68 && `datalong`!=0", script_table));
+
+        if (result)
+        {
+            do
+            {
+                fields = result->Fetch();
+                uint32 script1 = fields[0].GetUInt32();
+                if (script1)
+                    genericIds.insert(script1);
+            } while (result->NextRow());
+        }
+
+        // From SCRIPT_COMMAND_START_MAP_EVENT, SCRIPT_COMMAND_ADD_MAP_EVENT_TARGET and SCRIPT_COMMAND_EDIT_MAP_EVENT.
+        result.reset(WorldDatabase.PQuery("SELECT `dataint2`, `dataint4` FROM `%s` WHERE `command` IN (61, 63, 69)", script_table));
+
+        if (result)
+        {
+            do
+            {
+                fields = result->Fetch();
+                int32 script1 = fields[0].GetInt32();
+                if (script1 > 0)
+                    genericIds.insert(script1);
+                int32 script2 = fields[1].GetInt32();
+                if (script2 > 0)
+                    genericIds.insert(script2);
+            } while (result->NextRow());
+        }
+    }
+}
+
 void ScriptMgr::CollectPossibleEventIds(std::set<uint32>& eventIds)
 {
-
     // Load all possible script entries from gameobjects.
     std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT `data2` FROM `gameobject_template` WHERE `type`=10 && `data2` > 0"));
     Field* fields;
@@ -2258,90 +2426,6 @@ void ScriptMgr::CollectPossibleEventIds(std::set<uint32>& eventIds)
                         eventIds.insert(spell->EffectMiscValue[j]);
                 }
             }
-        }
-    }
-    
-    // Load all possible script entries from SCRIPT_COMMAND_START_SCRIPT.
-    char const* script_tables[9] =
-    {
-        "creature_ai_scripts",
-        "creature_movement_scripts",
-        "creature_spells_scripts",
-        "event_scripts",
-        "gossip_scripts",
-        "gameobject_scripts",
-        "spell_scripts",
-        "quest_end_scripts",
-        "quest_start_scripts"
-    };
-    for (const auto& script_table : script_tables)
-    {
-        // From SCRIPT_COMMAND_START_SCRIPT.
-        result.reset(WorldDatabase.PQuery("SELECT `datalong`, `datalong2`, `datalong3`, `datalong4` FROM `%s` WHERE `command`=39", script_table));
-
-        if (result)
-        {
-            do
-            {
-                fields = result->Fetch();
-                uint32 event1 = fields[0].GetUInt32();
-                if (event1)
-                    eventIds.insert(event1);
-                uint32 event2 = fields[1].GetUInt32();
-                if (event2)
-                    eventIds.insert(event2);
-                uint32 event3 = fields[2].GetUInt32();
-                if (event3)
-                    eventIds.insert(event3);
-                uint32 event4 = fields[3].GetUInt32();
-                if (event4)
-                    eventIds.insert(event4);
-            } while (result->NextRow());
-        }
-
-        // From SCRIPT_COMMAND_TEMP_SUMMON_CREATURE.
-        result.reset(WorldDatabase.PQuery("SELECT `dataint2` FROM `%s` WHERE `command`=10 && `dataint2`!=0", script_table));
-
-        if (result)
-        {
-            do
-            {
-                fields = result->Fetch();
-                uint32 event1 = fields[0].GetUInt32();
-                if (event1)
-                    eventIds.insert(event1);
-            } while (result->NextRow());
-        }
-
-        // From SCRIPT_COMMAND_START_SCRIPT_FOR_ALL.
-        result.reset(WorldDatabase.PQuery("SELECT `datalong` FROM `%s` WHERE `command`=68", script_table));
-
-        if (result)
-        {
-            do
-            {
-                fields = result->Fetch();
-                uint32 event1 = fields[0].GetUInt32();
-                if (event1)
-                    eventIds.insert(event1);
-            } while (result->NextRow());
-        }
-
-        // From SCRIPT_COMMAND_START_MAP_EVENT, SCRIPT_COMMAND_ADD_MAP_EVENT_TARGET and SCRIPT_COMMAND_EDIT_MAP_EVENT.
-        result.reset(WorldDatabase.PQuery("SELECT `dataint2`, `dataint4` FROM `%s` WHERE `command` IN (61, 63, 69)", script_table));
-
-        if (result)
-        {
-            do
-            {
-                fields = result->Fetch();
-                uint32 event1 = fields[0].GetUInt32();
-                if (event1)
-                    eventIds.insert(event1);
-                uint32 event2 = fields[1].GetUInt32();
-                if (event2)
-                    eventIds.insert(event2);
-            } while (result->NextRow());
         }
     }
 }
@@ -2474,7 +2558,7 @@ void DoOrSimulateScriptTextForMap(int32 iTextEntry, uint32 uiCreatureEntry, Map*
     return;
     }
 
-    CreatureInfo const* pInfo = GetCreatureTemplateStore(uiCreatureEntry);
+    CreatureInfo const* pInfo = sObjectMgr.GetCreatureTemplate(uiCreatureEntry);
     if (!pInfo)
     {
         sLog.outError("DoOrSimulateScriptTextForMap has invalid source entry %u for map %u.", uiCreatureEntry, pMap->GetId());

@@ -1071,7 +1071,7 @@ bool ChatHandler::HandleUnstuckCommand(char* /*args*/)
     if (!pPlayer)
         return false;
 
-    if (pPlayer->IsInCombat() || pPlayer->InBattleGround() || pPlayer->IsTaxiFlying() || pPlayer->HasSpellCooldown(20939) || (pPlayer->GetDeathState() == CORPSE) || (pPlayer->GetLevel() < 10))
+    if (pPlayer->IsInCombat() || pPlayer->InBattleGround() || pPlayer->IsTaxiFlying() || !pPlayer->IsSpellReady(20939) || (pPlayer->GetDeathState() == CORPSE) || (pPlayer->GetLevel() < 10))
     {
         SendSysMessage(LANG_UNSTUCK_UNAVAILABLE);
         return false;
@@ -1084,8 +1084,9 @@ bool ChatHandler::HandleUnstuckCommand(char* /*args*/)
     }
     else
     {
-        pPlayer->AddAura(15007); // Add Resurrection Sickness
-        pPlayer->AddSpellCooldown(20939, 0, time(nullptr) + 3600000); // Trigger 1 Hour Cooldown
+        pPlayer->AddAura(SPELL_ID_PASSIVE_RESURRECTION_SICKNESS); // Add Resurrection Sickness
+        if (SpellEntry const* pSpellEntry= sSpellMgr.GetSpellEntry(20939))
+            pPlayer->AddCooldown(*pSpellEntry, nullptr, false, HOUR * IN_MILLISECONDS); // Trigger 1 Hour Cooldown
         // Get nearest graveyard.
         WorldSafeLocsEntry const* ClosestGrave = sObjectMgr.GetClosestGraveYard(pPlayer->GetPositionX(), pPlayer->GetPositionY(), pPlayer->GetPositionZ(), pPlayer->GetMapId(), pPlayer->GetTeam());
         if (!ClosestGrave) //No nearby graveyards (stuck in void?). Send ally to Westfall, Horde to Barrens.

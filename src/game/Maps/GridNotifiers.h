@@ -1148,17 +1148,47 @@ namespace MaNGOS
         NearestFriendlyGuardInRangeCheck(NearestFriendlyGuardInRangeCheck const&);
     };
 
+    class NearestInteractableNpcWithFlag
+    {
+    public:
+        NearestInteractableNpcWithFlag(Player const* obj, uint32 npcFlags)
+            : i_obj(obj), i_npcFlags(npcFlags), i_range(INTERACTION_DISTANCE) {}
+        WorldObject const& GetFocusObject() const { return *i_obj; }
+        bool operator()(Creature const* u)
+        {
+            if (!i_obj->IsWithinDistInMap(u, i_range))
+                return false;
+
+            if (!i_obj->CanInteractWithNPC(u, i_npcFlags))
+                return false;
+
+            i_range = i_obj->GetDistance(u);            // use found unit range as new range limit for next check
+            return true;
+        }
+        float GetLastRange() const { return i_range; }
+    private:
+        Player const* const i_obj;
+        float  i_range;
+        uint32 i_npcFlags;
+
+        // prevent clone this object
+        NearestInteractableNpcWithFlag(NearestInteractableNpcWithFlag const&);
+    };
+
     // Success at unit in range, range update for next check (this can be use with CreatureLastSearcher to find nearest creature)
     class NearestCreatureEntryWithLiveStateInObjectRangeCheck
     {
         public:
-            NearestCreatureEntryWithLiveStateInObjectRangeCheck(WorldObject const& obj,uint32 entry, bool alive, float range)
-                : i_obj(obj), i_entry(entry), i_alive(alive), i_range(range) {}
+            NearestCreatureEntryWithLiveStateInObjectRangeCheck(WorldObject const& obj,uint32 entry, bool alive, float range, Creature const* except = nullptr)
+                : i_obj(obj), i_entry(entry), i_alive(alive), i_range(range), i_except(except) {}
             WorldObject const& GetFocusObject() const { return i_obj; }
             bool operator()(Creature* u)
             {
                 if (u->GetEntry() == i_entry && ((i_alive && u->IsAlive()) || (!i_alive && u->IsCorpse())) && i_obj.IsWithinDistInMap(u, i_range))
                 {
+                    if (u == i_except)
+                        return false;
+
                     i_range = i_obj.GetDistance(u);         // use found unit range as new range limit for next check
                     return true;
                 }
@@ -1170,6 +1200,7 @@ namespace MaNGOS
             uint32 i_entry;
             bool   i_alive;
             float  i_range;
+            Creature const* i_except;
 
             // prevent clone this object
             NearestCreatureEntryWithLiveStateInObjectRangeCheck(NearestCreatureEntryWithLiveStateInObjectRangeCheck const&);
