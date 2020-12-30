@@ -2405,18 +2405,12 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
         }
         case TARGET_ENUM_UNITS_SCRIPT_AOE_AT_SRC_LOC:
         {
-            SpellTargets targetB = SPELL_TARGETS_AOE_DAMAGE;
-
-            // Select friendly targets for positive effect
-            if (m_spellInfo->IsPositiveEffect(effIndex))
-                targetB = SPELL_TARGETS_FRIENDLY;
-
             UnitList tempTargetUnitMap;
             SpellScriptTargetBounds bounds = sSpellMgr.GetSpellScriptTargetBounds(m_spellInfo->Id);
 
             // fill real target list if no spell script target defined
             FillAreaTargets(bounds.first != bounds.second ? tempTargetUnitMap : targetUnitMap,
-                            radius, PUSH_DEST_CENTER, bounds.first != bounds.second ? SPELL_TARGETS_ALL : targetB);
+                            radius, PUSH_DEST_CENTER, SPELL_TARGETS_ALL);
 
             if (!tempTargetUnitMap.empty())
             {
@@ -3435,7 +3429,7 @@ SpellCastResult Spell::prepare(Aura* triggeredByAura, uint32 chance)
                     DEBUG_FILTER_LOG(LOG_FILTER_SPELL_CAST, "Spell %u failed for reason 0x%x (target %u)", m_spellInfo->Id, result, pTarget ? pTarget->GetGUIDLow() : 0);
                     if (triggeredByAura && !triggeredByAura->GetHolder()->IsPassive())
                     {
-                        SendChannelUpdate(0);
+                        SendChannelUpdate(0, true);
                         triggeredByAura->GetHolder()->SetAuraDuration(0);
                     }
 
@@ -3582,7 +3576,7 @@ void Spell::cancel()
                 }
             }
 
-            SendChannelUpdate(0);
+            SendChannelUpdate(0, true);
             SendInterrupted(0);
 
             if (m_caster->IsPlayer())
@@ -4884,7 +4878,7 @@ void Spell::SendInterrupted(uint8 result)
     m_caster->SendObjectMessageToSet(&data, true);
 }
 
-void Spell::SendChannelUpdate(uint32 time)
+void Spell::SendChannelUpdate(uint32 time, bool interrupted)
 {
     if (!m_channeled || m_spellState == SPELL_STATE_FINISHED)
         return;
@@ -4973,7 +4967,7 @@ void Spell::SendChannelUpdate(uint32 time)
         // Reset of channel values has to be done after a few delay.
         // Else, we have some visual bugs (arcane projectile, last tick)
         ChannelResetEvent* event = new ChannelResetEvent(m_casterUnit);
-        m_casterUnit->m_Events.AddEventAtOffset(event, 1000);
+        m_casterUnit->m_Events.AddEventAtOffset(event, (interrupted ? 1 : 1000));
     }
     else if (Player* pPlayer = m_casterUnit->ToPlayer())
     {
@@ -6395,11 +6389,16 @@ SpellCastResult Spell::CheckCast(bool strict)
                         if (!((Player*)m_caster)->CanUseBattleGroundObject())
                             return SPELL_FAILED_TRY_AGAIN;
                     }
+
                     lockId = go->GetGOInfo()->GetLockId();
                     if (!lockId)
                         return SPELL_FAILED_ALREADY_OPEN;
+
                     if (!go->IsUseRequirementMet())
                         return SPELL_FAILED_TRY_AGAIN;
+
+                    if (!strict && go->HasFlag(GAMEOBJECT_FLAGS, GO_FLAG_IN_USE))
+                        return SPELL_FAILED_CHEST_IN_USE;
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
                     // Prevent looting chests while totally immune
@@ -7269,11 +7268,9 @@ SpellCastResult Spell::CheckRange(bool strict)
     max_range += range_mod;
 
     GameObject* go = m_targets.getGOTarget(); // Check range for gobjects (lock picking)
-    if (go)
+    if (go && m_caster->IsPlayer())
     {
-        float const dist = m_caster->GetDistance(go);
-
-        if (dist > max_range)
+        if (!go->IsAtInteractDistance(dynamic_cast<Player*>(m_caster), max_range)) // only player casts these
             return SPELL_FAILED_OUT_OF_RANGE;
     }
 
@@ -7698,22 +7695,22 @@ SpellCastResult Spell::CheckItems()
         {
             case SPELL_EFFECT_CREATE_ITEM:
             {
-                if (!m_IsTriggeredSpell && m_spellInfo->EffectItemType[i])
+                if (Unit* target = m_targets.getUnitTarget())
                 {
+                    if (!target->IsPlayer())
+                        return SPELL_FAILED_BAD_TARGETS;
+
+                    uint32 count = CalculateDamage(SpellEffectIndex(i), target);
                     ItemPosCountVec dest;
-                    Unit* createItemTarget = p_caster;
-                    if (m_spellInfo->Id == 24726)
-                        createItemTarget = m_targets.getUnitTarget();
-                    // Quelle idee d'ajouter un item a un mob ...
-                    if (createItemTarget->GetTypeId() != TYPEID_PLAYER)
-                        return SPELL_FAILED_DONT_REPORT;
-                    InventoryResult msg = createItemTarget->ToPlayer()->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, m_spellInfo->EffectItemType[i], 1);
+                    uint32 no_space = 0;
+                    InventoryResult msg = static_cast<Player*>(target)->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, m_spellInfo->EffectItemType[i], count, &no_space);
                     if (msg != EQUIP_ERR_OK)
                     {
-                        createItemTarget->ToPlayer() ->SendEquipError(msg, nullptr, nullptr, m_spellInfo->EffectItemType[i]);
+                        static_cast<Player*>(target)->SendEquipError(msg, nullptr, nullptr, m_spellInfo->EffectItemType[i]);
                         return SPELL_FAILED_DONT_REPORT;
                     }
                 }
+
                 break;
             }
             case SPELL_EFFECT_ENCHANT_ITEM:

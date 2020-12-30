@@ -92,6 +92,12 @@ struct npc_giltharesAI : public npc_escortAI
 
     void Reset() override { }
 
+    void JustRespawned() override
+    {
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC);
+        npc_escortAI::JustRespawned();
+    }
+
     void WaypointReached(uint32 uiPointId) override
     {
         Player* pPlayer = GetPlayerForEscort();
@@ -162,6 +168,7 @@ bool QuestAccept_npc_gilthares(Player* pPlayer, Creature* pCreature, Quest const
     if (pQuest->GetQuestId() == QUEST_FREE_FROM_HOLD)
     {
         pCreature->SetFactionTemplateId(FACTION_ESCORT_H_NEUTRAL_ACTIVE);
+        pCreature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC);
         pCreature->SetStandState(UNIT_STAND_STATE_STAND);
 
         DoScriptText(SAY_GIL_START, pCreature, pPlayer);
@@ -533,10 +540,9 @@ struct npc_wizzlecranks_shredderAI : public npc_escortAI
                             break;
                         case 3:
                             if (Player* pPlayer = GetPlayerForEscort())
-                            {
                                 pPlayer->GroupEventHappens(QUEST_ESCAPE, m_creature);
-                                m_creature->SummonCreature(NPC_PILOT_WIZZ, 0.0f, 0.0f, 0.0f, 0.0f, TEMPSUMMON_TIMED_DESPAWN, 180000);
-                            }
+                            m_creature->SummonCreature(NPC_PILOT_WIZZ, 0.0f, 0.0f, 0.0f, 0.0f, TEMPSUMMON_TIMED_DESPAWN, 180000);
+                            m_creature->ResetHomePosition();
                             break;
                     }
 

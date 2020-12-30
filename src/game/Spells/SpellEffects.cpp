@@ -548,6 +548,24 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
         {
             switch (m_spellInfo->Id)
             {
+                case 20863: // Muglash's Brazier Trap
+                {
+                    if (unitTarget && unitTarget->IsCreature())
+                    {
+                        // Change phase of Muglash to 2 so he continues escort.
+                        // Using script command to avoid including event ai header.
+                        static ScriptInfo scriptSetPhase;
+                        scriptSetPhase.command = SCRIPT_COMMAND_SET_PHASE;
+                        scriptSetPhase.setPhase.phase = 2;
+                        scriptSetPhase.setPhase.mode = SO_SETPHASE_RAW;
+                        unitTarget->GetMap()->ScriptCommandStart(scriptSetPhase, 0, unitTarget, unitTarget);
+
+                        // Prevent further interaction with Naga Brazier.
+                        if (GameObject* pGo = m_caster->FindNearestGameObject(178247, 30.0f))
+                            pGo->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+                    }
+                    return;
+                }
                 case 9009: // Coarse Dynamite (used by npc 1073)
                 {
                     if (!m_casterUnit)
@@ -1004,7 +1022,20 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
                     if (!pPlayer)
                         return;
 
-                    uint32 spellId = PickRandomValue(16595, 16593, 16591);
+                    // https://old.reddit.com/r/classicwow/comments/jwycmc/noggenfogger_1000_consumes_593_skellies_210_minis/
+                    uint32 spellId = 16591; // skeleton (60%)
+                    switch (urand(1, 10))
+                    {
+                        case 1:
+                        case 2:
+                            spellId = 16595; // mini (20%)
+                            break;
+                        case 3:
+                        case 4:
+                            spellId = 16593; // slow fall (20%)
+                            break;
+                    }
+
                     pPlayer->CastSpell(pPlayer, spellId, true, nullptr);
                     return;
                 }
@@ -1095,29 +1126,21 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
 
                     if (!m_originalCaster)
                         return;
-
-                    float tempDamage = 0.0f;
-                    float distance = m_originalCaster->GetDistance(unitTarget);
-                    distance = 1.0 - (distance / 25.0f);
-
-                    if (unitTarget->IsAlive())
+                    
+                    int32 damage;
+                    if (unitTarget->IsPlayer()) // damage from 100 - 500 based on proximity - max range 25
+                        damage = 100 + ((25 - std::min(m_originalCaster->GetCombatDistance(unitTarget), 25.f)) / 25.f) * 400;
+                    else if (unitTarget->GetEntry() == 15370) // buru
                     {
-                        if (unitTarget->IsPlayer())
-                        {
-                            tempDamage = 500 * distance;
-                            if (tempDamage < 100)
-                                tempDamage = 100;
-                        }
-                        else
-                        {
-                            if (unitTarget->GetEntry() == 15370 && unitTarget->GetHealthPercent() > 20.0f)
-                                tempDamage = 45000 * distance;
-                            else
-                                return;
-                        }
+                        damage = unitTarget->GetHealth() * 15 / 100; // 15% hp for buru
 
-                        m_originalCaster->DealDamage(unitTarget, tempDamage, nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
+                        if (unitTarget->GetVictim())
+                            unitTarget->GetThreatManager().modifyThreatPercent(unitTarget->GetVictim(), -100);
                     }
+                    else
+                        return;
+
+                    m_originalCaster->CastCustomSpell(unitTarget, 5255, &damage, nullptr, nullptr, true);
                     return;
                 }
 #endif
@@ -2238,14 +2261,11 @@ void Spell::EffectApplyAura(SpellEffectIndex eff_idx)
 
     DEBUG_FILTER_LOG(LOG_FILTER_SPELL_CAST, "Spell: Aura is: %u [Spell%u:DiminishingGroup%u]", m_spellInfo->EffectApplyAuraName[eff_idx], m_spellInfo->Id, m_diminishGroup);
 
-    // Sayge's Dark Fortune of Damage: +1-10% (random)
-    if (m_spellInfo->Id == 23768)
-        m_currentBasePoints[EFFECT_INDEX_0] = urand(1, 10);
     // Gnomish Death Ray
     // rarely has a chance of dealing double damage, 14.29% chance (guess)
     // for now we use linear level scaling, but this is likely incorrect (hp pools don't scale exactly linearly)
     // there is some speculation that this should be tied to Engineering skill level, but since you don't need Engineering to use the item at all this seems doubtful
-    else if (m_spellInfo->Id == 13278)
+    if (m_spellInfo->Id == 13278)
         m_currentBasePoints[eff_idx] = eff_idx == EFFECT_INDEX_0 ? int32(urand(600, 1200) * (caster->GetLevel() / 60.0f)) * (!urand(0,6) ? 2 : 1)
                                                                  : m_currentBasePoints[EFFECT_INDEX_0] * 0.1249f;
     // Paladin T3 JoL
@@ -4623,6 +4643,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
                         return;
 
+                    // Hallowed Wands do not work in combat.
+                    if (unitTarget->IsInCombat())
+                        return;
+
                     // Pirate Costume (male or female)
                     m_caster->CastSpell(unitTarget, unitTarget->GetGender() == GENDER_MALE ? 24708 : 24709, true);
                     return;
@@ -4630,6 +4654,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                 case 24718:                                 // Ninja Costume
                 {
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+                        return;
+
+                    // Hallowed Wands do not work in combat.
+                    if (unitTarget->IsInCombat())
                         return;
 
                     // Ninja Costume (male or female)
@@ -4641,6 +4669,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
                         return;
 
+                    // Hallowed Wands do not work in combat.
+                    if (unitTarget->IsInCombat())
+                        return;
+
                     // Leper Gnome Costume (male or female)
                     m_caster->CastSpell(unitTarget, unitTarget->GetGender() == GENDER_MALE ? 24712 : 24713, true);
                     return;
@@ -4648,6 +4680,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                 case 24720:                                 // Random Costume
                 {
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+                        return;
+
+                    // Hallowed Wands do not work in combat.
+                    if (unitTarget->IsInCombat())
                         return;
 
                     uint32 spellId = 0;
@@ -4683,6 +4719,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                 case 24737:                                 // Ghost Costume
                 {
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+                        return;
+
+                    // Hallowed Wands do not work in combat.
+                    if (unitTarget->IsInCombat())
                         return;
 
                     // Ghost Costume (male or female)
@@ -5051,11 +5091,18 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                 Unit* target = unitTarget ? unitTarget : m_casterUnit;
                 if (!target)
                     return;
-                target->RemoveSpellsCausingAura(SPELL_AURA_MOD_ROOT);
+                target->RemoveNegativeSpellsCausingAura(SPELL_AURA_MOD_ROOT);
                 Unit::AuraList const& slowingAuras = target->GetAurasByType(SPELL_AURA_MOD_DECREASE_SPEED);
                 for (Unit::AuraList::const_iterator iter = slowingAuras.begin(); iter != slowingAuras.end();)
                 {
                     SpellEntry const* aurSpellInfo = (*iter)->GetSpellProto();
+
+                    // skip positive and forced debuff auras
+                    if ((*iter)->IsPositive() || aurSpellInfo->HasAttribute(SPELL_ATTR_NEGATIVE))
+                    {
+                        ++iter;
+                        continue;
+                    }
 
                     uint32 aurMechMask = aurSpellInfo->GetAllSpellMechanicMask();
 

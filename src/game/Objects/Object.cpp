@@ -283,6 +283,9 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     if (target == this)                                     // building packet for yourself
         updateFlags |= UPDATEFLAG_SELF;
 
+    if (IsUnit() && static_cast<Unit const*>(this)->HasUnitState(UNIT_STAT_MELEE_ATTACKING) && static_cast<Unit const*>(this)->GetVictim())
+        updateFlags |= UPDATEFLAG_MELEE_ATTACKING;
+
     if (m_isNewObject)
         updatetype = UPDATETYPE_CREATE_OBJECT2;
 #else
@@ -290,7 +293,7 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
         updateFlags |= UPDATEFLAG_SELF;
 #endif
 
-    if (isType(TYPEMASK_GAMEOBJECT) && ((GameObject*)this)->GetGoType() == GAMEOBJECT_TYPE_TRANSPORT)
+    if (isType(TYPEMASK_GAMEOBJECT) && static_cast<GameObject const*>(this)->GetGoType() == GAMEOBJECT_TYPE_TRANSPORT)
         updateFlags |= UPDATEFLAG_TRANSPORT;
 
     //DEBUG_LOG("BuildCreateUpdate: update-type: %u, object-type: %u got updateFlags: %X", updatetype, m_objectTypeId, updateFlags);
@@ -310,7 +313,12 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     buf << uint32(updateFlags); // Flags
     buf << uint32(1); // AttackCycle (always 1 in sniffs)
     buf << uint32(0); // TimerId
-    buf << uint64(0); // VictimGuid
+
+    // VictimGuid
+    if (IsUnit() && static_cast<Unit const*>(this)->HasUnitState(UNIT_STAT_MELEE_ATTACKING) && static_cast<Unit const*>(this)->GetVictim())
+        buf << uint64(static_cast<Unit const*>(this)->GetVictim()->GetGUID());
+    else
+        buf << uint64(0);
 
     if (updateFlags & UPDATEFLAG_TRANSPORT)
     {
@@ -470,7 +478,7 @@ void Object::BuildMovementUpdate(ByteBuffer* data, uint8 updateFlags) const
         *data << uint32(1);
     }
 
-    if (updateFlags & UPDATEFLAG_FULLGUID)
+    if (updateFlags & UPDATEFLAG_MELEE_ATTACKING)
     {
         if (Unit const* me = ToUnit())
         {
@@ -1401,11 +1409,28 @@ float WorldObject::GetDistance2dToCenter(WorldObject const* target) const
     return (dist > 0 ? dist : 0);
 }
 
+float WorldObject::GetDistance2dToCenter(float x, float y) const
+{
+    float dx = GetPositionX() - x;
+    float dy = GetPositionY() - y;
+    float dist = sqrt((dx * dx) + (dy * dy));
+    return (dist > 0 ? dist : 0);
+}
+
 float WorldObject::GetDistance3dToCenter(WorldObject const* target) const
 {
     float dx = GetPositionX() - target->GetPositionX();
     float dy = GetPositionY() - target->GetPositionY();
     float dz = GetPositionZ() - target->GetPositionZ();
+    float dist = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    return (dist > 0 ? dist : 0);
+}
+
+float WorldObject::GetDistance3dToCenter(float x, float y, float z) const
+{
+    float dx = GetPositionX() - x;
+    float dy = GetPositionY() - y;
+    float dz = GetPositionZ() - z;
     float dist = sqrt((dx * dx) + (dy * dy) + (dz * dz));
     return (dist > 0 ? dist : 0);
 }
@@ -2135,11 +2160,9 @@ Creature* Map::SummonCreature(uint32 entry, float x, float y, float z, float ang
 
     TemporarySummon* pCreature = new TemporarySummon();
 
-    Team team = TEAM_NONE;
-
     CreatureCreatePos pos(this, x, y, z, ang);
 
-    if (!pCreature->Create(GenerateLocalLowGuid(HIGHGUID_UNIT), pos, pInf, team, entry))
+    if (!pCreature->Create(GenerateLocalLowGuid(HIGHGUID_UNIT), pos, pInf, entry))
     {
         delete pCreature;
         return nullptr;
@@ -2183,16 +2206,12 @@ Creature* WorldObject::SummonCreature(uint32 id, float x, float y, float z, floa
 
     TemporarySummon* pCreature = new TemporarySummon(GetObjectGuid());
 
-    Team team = TEAM_NONE;
-    if (GetTypeId() == TYPEID_PLAYER)
-        team = ((Player*)this)->GetTeam();
-
     CreatureCreatePos pos(GetMap(), x, y, z, ang);
 
     if (x == 0.0f && y == 0.0f && z == 0.0f)
         pos = CreatureCreatePos(this, GetOrientation(), CONTACT_DISTANCE, ang);
 
-    if (!pCreature->Create(GetMap()->GenerateLocalLowGuid(cinfo->GetHighGuid()), pos, cinfo, team, id))
+    if (!pCreature->Create(GetMap()->GenerateLocalLowGuid(cinfo->GetHighGuid()), pos, cinfo, id))
     {
         delete pCreature;
         return nullptr;
@@ -3294,8 +3313,8 @@ ReputationRank WorldObject::GetReactionTo(WorldObject const* target) const
 
             // check FFA_PVP - not implemented that way on MaNGOS :/
             /*
-            if (GetByteValue(UNIT_FIELD_BYTES_2, 1) & UNIT_BYTE2_FLAG_FFA_PVP
-            && target->GetByteValue(UNIT_FIELD_BYTES_2, 1) & UNIT_BYTE2_FLAG_FFA_PVP)
+            if (GetByteValue(UNIT_FIELD_BYTES_2, UNIT_BYTES_2_OFFSET_MISC_FLAGS) & UNIT_BYTE2_FLAG_FFA_PVP
+            && target->GetByteValue(UNIT_FIELD_BYTES_2, UNIT_BYTES_2_OFFSET_MISC_FLAGS) & UNIT_BYTE2_FLAG_FFA_PVP)
             return REP_HOSTILE;
             */
         }
@@ -4078,10 +4097,10 @@ uint32 WorldObject::CalcArmorReducedDamage(Unit* pVictim, uint32 const damage) c
     return (newdamage > 1) ? newdamage : 1;
 }
 
-int32 WorldObject::CalculateSpellDamage(Unit const* target, SpellEntry const* spellProto, SpellEffectIndex effect_index, int32 const* effBasePoints, Spell* spell)
+int32 WorldObject::CalculateSpellDamage(Unit const* target, SpellEntry const* spellProto, SpellEffectIndex effect_index, int32 const* effBasePoints, Spell* spell) const
 {
-    Unit* pUnit = ToUnit();
-    Player* pPlayer = ToPlayer();
+    Unit const* pUnit = ToUnit();
+    Player const* pPlayer = ToPlayer();
 
     uint8 comboPoints = pPlayer ? pPlayer->GetComboPoints() : 0;
 

@@ -64,7 +64,6 @@ void AddSC_boss_overlordwyrmthalak();
 void AddSC_boss_shadowvosh();
 void AddSC_boss_thebeast();
 void AddSC_boss_warmastervoone();
-void AddSC_boss_quatermasterzigris();
 void AddSC_boss_pyroguard_emberseer();
 void AddSC_boss_razorgore();                         //blackwing_lair
 void AddSC_boss_vael();
@@ -190,7 +189,6 @@ void AddSC_stormwind_city();
 void AddSC_quest_stormwind_rendezvous();
 void AddSC_stranglethorn_vale();
 void AddSC_swamp_of_sorrows();
-void AddSC_tirisfal_glades();
 void AddSC_undercity();
 void AddSC_western_plaguelands();
 void AddSC_westfall();
@@ -319,7 +317,6 @@ void AddScripts()
     AddSC_boss_shadowvosh();
     AddSC_boss_thebeast();
     AddSC_boss_warmastervoone();
-    AddSC_boss_quatermasterzigris();
 
     AddSC_instance_blackrock_spire();
     AddSC_boss_pyroguard_emberseer();
@@ -444,7 +441,6 @@ void AddScripts()
     AddSC_quest_stormwind_rendezvous();
     AddSC_stranglethorn_vale();
     AddSC_swamp_of_sorrows();
-    AddSC_tirisfal_glades();
     AddSC_undercity();
     AddSC_western_plaguelands();
     AddSC_westfall();

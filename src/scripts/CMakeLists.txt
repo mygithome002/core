@@ -67,7 +67,6 @@ set (SCRIPTS_SRCS
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_mother_smolderweb.cpp
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_overlord_wyrmthalak.cpp
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_pyroguard_emberseer.cpp
-    eastern_kingdoms/burning_steppes/blackrock_spire/boss_quartermaster_zigris.cpp
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_shadow_hunter_voshgajin.cpp
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_the_beast.cpp
     eastern_kingdoms/burning_steppes/blackrock_spire/boss_urok.cpp
@@ -159,7 +158,6 @@ set (SCRIPTS_SRCS
     eastern_kingdoms/swamp_of_sorrows/swamp_of_sorrows.cpp
     eastern_kingdoms/swamp_of_sorrows/sunken_temple/instance_sunken_temple.cpp
     eastern_kingdoms/swamp_of_sorrows/sunken_temple/sunken_temple.cpp
-    eastern_kingdoms/tirisfal_glades/tirisfal_glades.cpp
     eastern_kingdoms/tirisfal_glades/scarlet_monastery/boss_arcanist_doan.cpp
     eastern_kingdoms/tirisfal_glades/scarlet_monastery/boss_azshir_the_sleepless.cpp
     eastern_kingdoms/tirisfal_glades/scarlet_monastery/boss_bloodmage_thalnos.cpp
