@@ -27,7 +27,6 @@
 #include "Object.h"
 #include "LootMgr.h"
 #include "Database/DatabaseEnv.h"
-#include <ace/Thread_Mutex.h>
 #include "Util.h"
 
 // GCC have alternative #pragma pack(N) syntax and old gcc version not support pack(push,N), also any gcc version not support it at some platform
@@ -705,6 +704,8 @@ class GameObject : public WorldObject
 
         ObjectGuid const& GetOwnerGuid() const { return GetGuidValue(OBJECT_FIELD_CREATED_BY); }
         Unit* GetOwner() const;
+        Player* GetAffectingPlayer() const final;
+        bool IsCharmerOrOwnerPlayerOrPlayerItself() const final { return GetOwnerGuid().IsPlayer(); }
 
         void SetSpellId(uint32 id)
         {
@@ -773,6 +774,7 @@ class GameObject : public WorldObject
         uint32 GetDisplayId() const { return GetUInt32Value(GAMEOBJECT_DISPLAYID); }
         void SetDisplayId(uint32 modelId);
 
+        bool HasCustomAnim() const;
         void SendGameObjectCustomAnim(uint32 animId = 0);
         void SendGameObjectReset();
 
@@ -856,7 +858,6 @@ class GameObject : public WorldObject
 
         uint32 GetFactionTemplateId() const final { return GetGOInfo()->faction; }
         uint32 GetLevel() const final ;
-        bool IsValidAttackTarget(Unit const* target) const final ;
 
         bool IsAtInteractDistance(Position const& pos, float radius) const;
         bool IsAtInteractDistance(Player const* player, uint32 maxRange = 0) const;
@@ -881,7 +882,7 @@ class GameObject : public WorldObject
         // collected only for GAMEOBJECT_TYPE_SUMMONING_RITUAL
         ObjectGuid m_firstUser;                             // first GO user, in most used cases owner, but in some cases no, for example non-summoned multi-use GAMEOBJECT_TYPE_SUMMONING_RITUAL
         GuidsSet m_UniqueUsers;                             // all players who use item, some items activated after specific amount unique uses
-        ACE_Thread_Mutex m_UniqueUsers_lock;
+        std::mutex m_UniqueUsers_lock;
         ObjectGuid m_summonTarget;                          // The player who is being summoned
 
         uint64 m_rotation;

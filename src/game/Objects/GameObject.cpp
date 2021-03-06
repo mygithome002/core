@@ -509,20 +509,8 @@ void GameObject::Update(uint32 update_diff, uint32 /*p_time*/)
 
                         // TODO: all traps can be activated, also those without spell.
                         // Some may have have animation and/or are expected to despawn.
-                        switch (GetDisplayId())
-                        {
-                            case 3071: // freezing trap
-                            case 3072: // explosive trap
-                            case 3073: // frost trap, fixed trap
-                            case 3074: // immolation trap
-                            case 4392: // lava fissure
-                            case 4472: // lava fissure
-                            case 4491: // mortar in dun morogh
-                            case 6785: // plague fissure
-                            case 6747: // sapphiron birth
-                                SendGameObjectCustomAnim();
-                                break;
-                        }
+                        if (HasCustomAnim())
+                            SendGameObjectCustomAnim();
                     }
                 }
 
@@ -597,7 +585,7 @@ void GameObject::Update(uint32 update_diff, uint32 /*p_time*/)
             // burning flags in some battlegrounds, if you find better condition, just add it
             if (GetGOInfo()->IsDespawnAtAction() || GetGoAnimProgress() > 0)
             {
-                SendObjectDeSpawnAnim(GetObjectGuid());
+                SendObjectDeSpawnAnim();
                 // reset flags
                 if (GetMap()->Instanceable())
                 {
@@ -677,7 +665,7 @@ void GameObject::Refresh()
 
 void GameObject::AddUniqueUse(Player* player)
 {
-    ACE_Guard <ACE_Thread_Mutex> guard(m_UniqueUsers_lock);
+    std::unique_lock<std::mutex> guard(m_UniqueUsers_lock);
 
     AddUse();
 
@@ -689,7 +677,7 @@ void GameObject::AddUniqueUse(Player* player)
 
     m_UniqueUsers.insert(player->GetObjectGuid());
 
-    guard.release();
+    guard.unlock();
 
     if (GameObjectInfo const* info = GetGOInfo())
         if (info->type == GAMEOBJECT_TYPE_SUMMONING_RITUAL &&
@@ -712,7 +700,7 @@ void GameObject::AddUniqueUse(Player* player)
 
 void GameObject::RemoveUniqueUse(Player* player)
 {
-    ACE_Guard <ACE_Thread_Mutex> guard(m_UniqueUsers_lock);
+    const std::lock_guard<std::mutex> guard(m_UniqueUsers_lock);
 
     auto itr = m_UniqueUsers.find(player->GetObjectGuid());
     if (itr == m_UniqueUsers.end())
@@ -741,7 +729,7 @@ void GameObject::RemoveUniqueUse(Player* player)
 
 void GameObject::FinishRitual()
 {
-    ACE_Guard <ACE_Thread_Mutex> guard(m_UniqueUsers_lock);
+    std::unique_lock<std::mutex> guard(m_UniqueUsers_lock);
 
     if (GameObjectInfo const* info = GetGOInfo())
     {
@@ -760,7 +748,7 @@ void GameObject::FinishRitual()
             {
                 std::advance(it, urand(0, m_UniqueUsers.size() - 1));
 
-                guard.release();
+                guard.unlock();
 
                 if (Player* target = GetMap()->GetPlayer(*it))
                     target->CastSpell(target, spellid, true);
@@ -771,13 +759,13 @@ void GameObject::FinishRitual()
 
 bool GameObject::HasUniqueUser(Player* player)
 {
-    ACE_Guard <ACE_Thread_Mutex> guard(m_UniqueUsers_lock);
+    const std::lock_guard<std::mutex> guard(m_UniqueUsers_lock);
     return m_UniqueUsers.find(player->GetObjectGuid()) != m_UniqueUsers.end();
 }
 
 uint32 GameObject::GetUniqueUseCount()
 {
-    ACE_Guard <ACE_Thread_Mutex> guard(m_UniqueUsers_lock);
+    const std::lock_guard<std::mutex> guard(m_UniqueUsers_lock);
     return m_UniqueUsers.size();
 }
 
@@ -796,7 +784,7 @@ void GameObject::Delete()
     // no despawn animation for not activated rituals
     if (GetGoType() != GAMEOBJECT_TYPE_SUMMONING_RITUAL ||
         GetGoState() == GO_STATE_ACTIVE)
-        SendObjectDeSpawnAnim(GetObjectGuid());
+        SendObjectDeSpawnAnim();
 
     if (!IsDeleted())
         AddObjectToRemoveList();
@@ -1039,6 +1027,17 @@ Unit* GameObject::GetOwner() const
     if (!FindMap())
         return nullptr;
     return FindMap()->GetUnit(GetOwnerGuid());
+}
+
+Player* GameObject::GetAffectingPlayer() const
+{
+    if (!GetOwnerGuid())
+        return nullptr;
+
+    if (Unit* owner = GetOwner())
+        return owner->GetCharmerOrOwnerPlayerOrPlayerItself();
+
+    return nullptr;
 }
 
 void GameObject::SaveRespawnTime()
@@ -1433,6 +1432,9 @@ void GameObject::Use(Unit* user)
                 else
                     CastSpell(user, spellId, true, nullptr, nullptr, GetObjectGuid());
             }
+
+            if (HasCustomAnim())
+                SendGameObjectCustomAnim();
 
             if (uint32 max_charges = GetGOInfo()->GetCharges())
             {
@@ -2347,6 +2349,26 @@ GameObjectData const* GameObject::GetGOData() const
     return sObjectMgr.GetGOData(GetGUIDLow());
 }
 
+bool GameObject::HasCustomAnim() const
+{
+    switch (GetDisplayId())
+    {
+        case 3071: // freezing trap
+        case 3072: // explosive trap
+        case 3073: // frost trap, fixed trap
+        case 3074: // immolation trap
+        case 4392: // lava fissure
+        case 4472: // lava fissure
+        case 4491: // mortar in dun morogh
+        case 6785: // plague fissure
+        case 6747: // sapphiron birth
+        case 6871: // Silithyst bring in
+            return true;
+    }
+
+    return false;
+}
+
 void GameObject::SendGameObjectCustomAnim(uint32 animId /*= 0*/)
 {
     WorldPacket data(SMSG_GAMEOBJECT_CUSTOM_ANIM, 8 + 4);
@@ -2364,7 +2386,7 @@ void GameObject::SendGameObjectReset()
 
 void GameObject::Despawn()
 {
-    SendObjectDeSpawnAnim(GetObjectGuid());
+    SendObjectDeSpawnAnim();
     if (GameObjectData const* data = GetGOData())
     {
         if (m_spawnedByDefault)
@@ -2405,58 +2427,6 @@ uint32 GameObject::GetLevel() const
         level = GetUInt32Value(GAMEOBJECT_LEVEL);
 
     return level > 0 ? level : PLAYER_MAX_LEVEL;
-}
-
-// function based on function Unit::CanAttack from 13850 client
-bool GameObject::IsValidAttackTarget(Unit const* target) const
-{
-    ASSERT(target);
-
-    if (FindMap() != target->FindMap())
-        return false;
-
-    // can't attack unattackable units or GMs
-    if (target->GetTypeId() == TYPEID_PLAYER && target->ToPlayer()->IsGameMaster())
-        return false;
-
-    // check flags
-    if (target->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_TAXI_FLIGHT | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_NON_ATTACKABLE_2))
-        return false;
-
-    // CvC case - can attack each other only when one of them is hostile
-    if (!target->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
-        return GetReactionTo(target) <= REP_HOSTILE || target->GetReactionTo(this) <= REP_HOSTILE;
-
-    // PvP, PvC, CvP case
-    // can't attack friendly targets
-    if (GetReactionTo(target) > REP_NEUTRAL
-        || target->GetReactionTo(this) > REP_NEUTRAL)
-        return false;
-
-    Player const* playerAffectingTarget = target->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED) ? target->GetAffectingPlayer() : nullptr;
-
-    // Not all neutral creatures can be attacked
-    if (GetReactionTo(target) == REP_NEUTRAL &&
-        target->GetReactionTo(this) == REP_NEUTRAL)
-    {
-        if (playerAffectingTarget)
-        {
-            Player const* player = playerAffectingTarget;
-            WorldObject const* non_player = this;
-
-            if (FactionTemplateEntry const* factionTemplate = non_player->getFactionTemplateEntry())
-            {
-                if (!(player->GetReputationMgr().GetForcedRankIfAny(factionTemplate)))
-                    if (FactionEntry const* factionEntry = sObjectMgr.GetFactionEntry(factionTemplate->faction))
-                        if (FactionState const* repState = player->GetReputationMgr().GetState(factionEntry))
-                            if (!(repState->Flags & FACTION_FLAG_AT_WAR))
-                                return false;
-
-            }
-        }
-    }
-
-    return true;
 }
 
 bool GameObject::IsAtInteractDistance(Player const* player, uint32 maxRange) const
@@ -2529,7 +2499,7 @@ SpellEntry const* GameObject::GetSpellForLock(Player const* player) const
             if (SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(playerSpell.first))
                 for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
                     if (spellInfo->Effect[i] == SPELL_EFFECT_OPEN_LOCK && ((uint32)spellInfo->EffectMiscValue[i]) == lock->Index[i])
-                        if (player->CalculateSpellDamage(nullptr, spellInfo, SpellEffectIndex(i), nullptr) >= int32(lock->Skill[i]))
+                        if (player->CalculateSpellEffectValue(nullptr, spellInfo, SpellEffectIndex(i), nullptr) >= int32(lock->Skill[i]))
                             return spellInfo;
     }
 

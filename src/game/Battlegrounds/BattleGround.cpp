@@ -715,6 +715,9 @@ uint32 BattleGround::GetBattlemasterEntry() const
 
 void BattleGround::RewardMark(Player* pPlayer, bool winner)
 {
+    if (pPlayer->IsBot())
+        return;
+
     if (winner)
         RewardSpellCast(pPlayer, pPlayer->GetTeamId() ? GetHordeWinSpell() : GetAllianceWinSpell());
     else
@@ -956,10 +959,6 @@ void BattleGround::StartBattleGround()
 
 void BattleGround::AddPlayer(Player* pPlayer)
 {
-    // remove afk from player
-    if (pPlayer->IsAFK())
-        pPlayer->ToggleAFK();
-
     // score struct must be created in inherited class
 
     ObjectGuid guid = pPlayer->GetObjectGuid();

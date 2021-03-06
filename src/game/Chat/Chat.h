@@ -509,9 +509,12 @@ class ChatHandler
         bool HandleGameObjectSelectCommand(char* args);
         bool HandleGameObjectRespawnCommand(char* args);
         bool HandleGameObjectInfoCommand(char* args);
+        bool HandleGameObjectUseCommand(char* args);
         bool HandleGameObjectSetGoStateCommand(char* args);
         bool HandleGameObjectSetLootStateCommand(char* args);
         bool HandleGameObjectSendCustomAnimCommand(char* args);
+        bool HandleGameObjectSendSpawnAnimCommand(char* args);
+        bool HandleGameObjectSendDespawnAnimCommand(char* args);
         GameObject* getSelectedGameObject();
 
         bool HandleGMCommand(char* args);
@@ -706,6 +709,7 @@ class ChatHandler
 
         bool HandleUnitAIInfoCommand(char* args);
         bool HandleUnitInfoCommand(char* args);
+        bool HandleUnitSpeedInfoCommand(char* args);
         bool HandleUnitStatInfoCommand(char* args);
 
         bool HandlePDumpLoadCommand(char* args);
