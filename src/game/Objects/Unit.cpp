@@ -36,6 +36,7 @@
 #include "SpellAuras.h"
 #include "ObjectAccessor.h"
 #include "CreatureAI.h"
+#include "GameObjectAI.h"
 #include "TemporarySummon.h"
 #include "Formulas.h"
 #include "Util.h"
@@ -1182,9 +1183,17 @@ void Unit::Kill(Unit* pVictim, SpellEntry const* spellProto, bool durabilityLoss
         if (TemporarySummon* pSummon = pCreatureVictim->IsTemporarySummon() ? static_cast<TemporarySummon*>(pCreatureVictim) : nullptr)
         {
             if (pSummon->GetSummonerGuid().IsCreature())
+            {
                 if (Creature* pSummoner = pCreatureVictim->GetMap()->GetCreature(pSummon->GetSummonerGuid()))
                     if (pSummoner->AI())
                         pSummoner->AI()->SummonedCreatureJustDied(pCreatureVictim);
+            }
+            else if (pSummon->GetSummonerGuid().IsGameObject())
+            {
+                if (GameObject* pSummoner = pCreatureVictim->GetMap()->GetGameObject(pSummon->GetSummonerGuid()))
+                    if (pSummoner->AI())
+                        pSummoner->AI()->SummonedCreatureJustDied(pCreatureVictim);
+            }
         }
         else if (Creature* pOwnerCreature = ::ToCreature(pVictim->GetCharmerOrOwner()))
         {
@@ -4388,8 +4397,7 @@ void Unit::SendAttackStateUpdate(CalcDamageInfo* damageInfo) const
         SubDamageInfo* subDamage = &damageInfo->subDamage[i];
 
         data << uint32(GetFirstSchoolInMask(subDamage->damageSchoolMask));
-        // Float coefficient of sub damage
-        data << ((damageInfo->totalDamage != 0) ? (float(subDamage->damage) / float(damageInfo->totalDamage)) : 0);
+        data << float(subDamage->damage);
         data << uint32(subDamage->damage);
         data << uint32(subDamage->absorb);
         data << int32(subDamage->resist);
@@ -9592,40 +9600,6 @@ void Unit::CombatStopInRange(float dist)
     Cell::VisitAllObjects(this, searcher, dist);
     for (const auto& iter : targets)
         iter->CombatStopWithPets(true);
-}
-
-uint32 Unit::DespawnNearCreaturesByEntry(uint32 entry, float range)
-{
-    std::list<Creature*> creatures;
-    GetCreatureListWithEntryInGrid(creatures, entry, range);
-    uint32 count = 0;
-    for (const auto& it : creatures)
-    {
-        if (it->IsInWorld())
-        {
-            ++count;
-            it->DisappearAndDie();
-        }
-    }
-    return count;
-}
-
-uint32 Unit::RespawnNearCreaturesByEntry(uint32 entry, float range)
-{
-    if (range == 0.0f)
-        range = GetMap()->GetVisibilityDistance();
-    uint32 count = 0;
-    std::list<Creature*> lList;
-    GetCreatureListWithEntryInGrid(lList, entry, range);
-    for (const auto& it : lList)
-    {
-        if (!it->IsAlive())
-        {
-            it->Respawn();
-            ++count;
-        }
-    }
-    return count;
 }
 
 // TriniyCore

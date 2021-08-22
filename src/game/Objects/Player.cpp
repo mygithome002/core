@@ -15061,6 +15061,14 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder* holder)
     // update items with duration and realtime
     UpdateItemDuration(time_diff, true);
 
+    // After quests and inventory loaded: force update on quest item counters
+    // Fixes cases when quest status data was not correctly saved during last session (crash, db connection lost, etc)
+    for (auto& data : mQuestStatus)
+    {
+        if (Quest const* quest = sObjectMgr.GetQuestTemplate(data.first))
+            AdjustQuestReqItemCount(quest, data.second);
+    }
+
     if (!m_taxi.LoadTaxiDestinationsFromString(taxi_nodes, GetTeam()))
     {
         // problems with taxi path loading
@@ -20787,9 +20795,6 @@ void Player::SetRestType(RestType n_r_type, uint32 areaTriggerId /*= 0*/)
     }
     else
     {
-        if (GetLevel() < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL) && m_timeInnEnter == 0 || time(nullptr) - m_timeInnEnter > 180)
-            SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_RESTED);
-
         SetFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING);
 
         m_innTriggerId = areaTriggerId;
