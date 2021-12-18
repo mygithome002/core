@@ -2770,6 +2770,24 @@ void Player::RegenerateHealth()
     ModifyHealth(int32(addvalue));
 }
 
+bool Player::CanUseBank(ObjectGuid bankerGUID) const
+{
+    // bankerGUID parameter is optional, set to 0 by default.
+    if (!bankerGUID)
+        bankerGUID = m_currentBankerGuid;
+
+    bool isUsingBankCommand = (bankerGUID == GetObjectGuid() && bankerGUID == m_currentBankerGuid);
+
+    if (!isUsingBankCommand)
+    {
+        Creature* creature = GetNPCIfCanInteractWith(bankerGUID, UNIT_NPC_FLAG_BANKER);
+        if (!creature)
+            return false;
+    }
+
+    return true;
+}
+
 bool Player::CanInteractWithQuestGiver(Object* questGiver) const
 {
     switch (questGiver->GetTypeId())
@@ -3447,9 +3465,6 @@ void Player::GiveLevel(uint32 level)
     // update level to hunter/summon pet
     if (Pet* pet = GetPet())
         pet->SynchronizeLevelWithOwner();
-
-    if (m_session->ShouldBeBanned(GetLevel()))
-        sWorld.BanAccount(BAN_ACCOUNT, m_session->GetUsername(), 0, m_session->GetScheduleBanReason(), "");
 }
 
 void Player::UpdateFreeTalentPoints(bool resetIfNeed)
@@ -4843,7 +4858,7 @@ void Player::BuildPlayerRepop()
     SetHealth(1);
 
     SetWaterWalking(true);
-    if (!GetSession()->isLogingOut())
+    if (!GetSession()->IsLogingOut())
         SetRooted(false);
 
     // BG - remove insignia related
@@ -7076,7 +7091,7 @@ void Player::DuelComplete(DuelCompleteType type)
     duel->opponent->SetUInt32Value(PLAYER_DUEL_TEAM, 0);
 
     if (duel->opponent->duel)
-        duel->opponent->duel->finished = true;;
+        duel->opponent->duel->finished = true;
     duel->finished = true;
 }
 
@@ -8212,7 +8227,6 @@ void Player::SendLoot(ObjectGuid guid, LootType loot_type, Player* pVictim)
     }
 
     SetLootGuid(guid);
-    ALL_SESSION_SCRIPTS(GetSession(), OnLoot(guid, loot_type));
 
     // need know for proper finish item loots (internal pre-switch loot type set in different from 3.x code version)
     // in fact this meaning that it send same loot types for interesting cases like 3.x version code (skip pre-3.x client loot type limitaitons)
@@ -9912,7 +9926,7 @@ InventoryResult Player::CanEquipItem(uint8 slot, uint16& dest, Item* pItem, bool
                 }
 
                 // prevent equip item in process logout
-                if (GetSession()->isLogingOut())
+                if (GetSession()->IsLogingOut())
                     return EQUIP_ERR_YOU_ARE_STUNNED;
 
                 if (IsInCombat() && pProto->Class == ITEM_CLASS_WEAPON && m_weaponChangeTimer != 0)
@@ -10027,7 +10041,7 @@ InventoryResult Player::CanUnequipItem(uint16 pos, bool swap) const
     }
 
     // prevent unequip item in process logout
-    if (GetSession()->isLogingOut())
+    if (GetSession()->IsLogingOut())
         return EQUIP_ERR_YOU_ARE_STUNNED;
 
     if (!swap && pItem->IsBag() && !((Bag*)pItem)->IsEmpty())
@@ -14594,7 +14608,6 @@ void Player::SendQuestUpdateAddCreatureOrGo(Quest const* pQuest, ObjectGuid guid
     uint16 slot = FindQuestSlot(pQuest->GetQuestId());
     if (slot < MAX_QUEST_LOG_SIZE)
         SetQuestSlotCounter(slot, uint8(creatureOrGO_idx), uint8(count));
-    ALL_SESSION_SCRIPTS(GetSession(), OnQuestKillUpdated(guid));
 }
 
 /*********************************************************/
@@ -16608,7 +16621,7 @@ void Player::SaveToDB(bool online, bool force)
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
-    if (m_session->isLogingOut() || !sWorld.getConfig(CONFIG_BOOL_STATS_SAVE_ONLY_ON_LOGOUT))
+    if (m_session->IsLogingOut() || !sWorld.getConfig(CONFIG_BOOL_STATS_SAVE_ONLY_ON_LOGOUT))
         _SaveStats();
 
     // save pet (hunter pet level and experience and all type pets health/mana).
@@ -17792,7 +17805,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
         return false;
 
     // not let cheating with start flight in time of logout process || if casting not finished || while in combat || if not use Spell's with EffectSendTaxi
-    if (GetSession()->isLogingOut() || IsInCombat())
+    if (GetSession()->IsLogingOut() || IsInCombat())
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
         data << uint32(ERR_TAXIPLAYERBUSY);
