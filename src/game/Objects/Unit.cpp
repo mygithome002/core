@@ -472,7 +472,7 @@ void Unit::SendHeartBeat(bool includingSelf)
 
 void Unit::SendMovementPacket(uint16 opcode, bool includingSelf)
 {
-    m_movementInfo.UpdateTime(WorldTimer::getMSTime());
+    m_movementInfo.SetAsServerSide();
     WorldPacket data(opcode);
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
     data << GetPackGUID();
@@ -1045,7 +1045,7 @@ void Unit::Kill(Unit* pVictim, SpellEntry const* spellProto, bool durabilityLoss
                 }
             }
 
-            loot->generateMoneyLoot(pCreatureVictim->GetCreatureInfo()->gold_min, pCreatureVictim->GetCreatureInfo()->gold_max);
+            loot->GenerateMoneyLoot(pCreatureVictim->GetCreatureInfo()->gold_min, pCreatureVictim->GetCreatureInfo()->gold_max);
         }
 
         if (pGroupTap)
@@ -4991,6 +4991,11 @@ uint32 Unit::GetGuardianCountWithEntry(uint32 entry)
     return result;
 }
 
+uint32 Unit::GetGuardiansCount() const
+{
+    return uint32(m_guardianPets.size());
+}
+
 Unit* Unit::_GetTotem(TotemSlot slot) const
 {
     return GetTotem(slot);
@@ -5070,6 +5075,14 @@ void Unit::SendEnvironmentalDamageLog(uint8 type, uint32 damage, uint32 absorb, 
     data << uint32(absorb);
     data << int32(resist);
     SendMessageToSet(&data, true);
+}
+
+uint32 Unit::GetSpellRank(SpellEntry const* spellInfo) const
+{
+    uint32 spellRank = GetLevel();
+    if (spellInfo->maxLevel > 0 && spellRank >= spellInfo->maxLevel * 5)
+        spellRank = spellInfo->maxLevel * 5;
+    return spellRank;
 }
 
 /**
@@ -5303,17 +5316,32 @@ bool Unit::IsImmuneToDamage(SpellSchoolMask shoolMask, SpellEntry const* spellIn
     // If m_immuneToDamage type contain magic, IMMUNE damage.
     SpellImmuneList const& damageList = m_spellImmune[IMMUNITY_DAMAGE];
     for (const auto& itr : damageList)
+    {
         if (itr.type & shoolMask)
-            return true;
+        {
+            if (!spellInfo || !spellInfo->IsPositiveSpell())
+                return true;
 
-    if (spellInfo && spellInfo->AttributesEx & SPELL_ATTR_EX_UNAFFECTED_BY_SCHOOL_IMMUNE)
-        return false;
+            SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+            if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                return true;
+        }
+    }
 
     // If m_immuneToSchool type contain this school type, IMMUNE damage.
     SpellImmuneList const& schoolList = m_spellImmune[IMMUNITY_SCHOOL];
     for (const auto& itr : schoolList)
+    {
         if (itr.type & shoolMask)
-            return true;
+        {
+            if (!spellInfo || !spellInfo->IsPositiveSpell())
+                return true;
+
+            SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+            if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                return true;
+        }
+    }
 
     return false;
 }
@@ -5328,18 +5356,34 @@ bool Unit::IsImmuneToSpell(SpellEntry const* spellInfo, bool /*castOnSelf*/) con
 
     SpellImmuneList const& dispelList = m_spellImmune[IMMUNITY_DISPEL];
     for (const auto& itr : dispelList)
+    {
         if (itr.type == spellInfo->Dispel)
-            return true;
+        {
+            if (!spellInfo->IsPositiveSpell())
+                return true;
+
+            SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+            if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                return true;
+        }
+    }
 
     if (!(spellInfo->Attributes & SPELL_ATTR_UNAFFECTED_BY_INVULNERABILITY)            // ignore invulnerability
-     && !(spellInfo->AttributesEx & SPELL_ATTR_EX_UNAFFECTED_BY_SCHOOL_IMMUNE)         // unaffected by school immunity
      && !(spellInfo->AttributesEx & SPELL_ATTR_EX_DISPEL_AURAS_ON_IMMUNITY))           // can remove immune (by dispell or immune it)
     {
         SpellImmuneList const& schoolList = m_spellImmune[IMMUNITY_SCHOOL];
         for (const auto& itr : schoolList)
-            if (!(Spells::IsPositiveSpell(itr.spellId) && spellInfo->IsPositiveSpell()) &&
-                    (itr.type & spellInfo->GetSpellSchoolMask()))
-                return true;
+        {
+            if (itr.type & spellInfo->GetSpellSchoolMask())
+            {
+                if (!spellInfo->IsPositiveSpell())
+                    return true;
+
+                SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+                if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
+        }
     }
 
     if (uint32 mechanic = spellInfo->Mechanic)
@@ -5348,7 +5392,14 @@ bool Unit::IsImmuneToSpell(SpellEntry const* spellInfo, bool /*castOnSelf*/) con
         for (const auto& itr : mechanicList)
         {
             if (itr.type == mechanic)
-                return true;
+            {
+                if (!spellInfo->IsPositiveSpell())
+                    return true;
+
+                SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+                if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
         }
 
         uint32 mask = 1 << (mechanic - 1);
@@ -5356,7 +5407,14 @@ bool Unit::IsImmuneToSpell(SpellEntry const* spellInfo, bool /*castOnSelf*/) con
         for (const auto& iter : immuneAuraApply)
         {
             if (iter->GetModifier()->m_miscvalue & mask)
-                return true;
+            {
+                if (!spellInfo->IsPositiveSpell())
+                    return true;
+
+                SpellEntry const* pImmunitySpell = iter->GetSpellProto();
+                if (pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
         }
     }
 
@@ -5369,20 +5427,47 @@ bool Unit::IsImmuneToSpellEffect(SpellEntry const* spellInfo, SpellEffectIndex i
     uint32 effect = spellInfo->Effect[index];
     SpellImmuneList const& effectList = m_spellImmune[IMMUNITY_EFFECT];
     for (const auto& itr : effectList)
+    {
         if (itr.type == effect)
-            return true;
+        {
+            if (!spellInfo->IsPositiveEffect(index))
+                return true;
+
+            SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+            if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                return true;
+        }
+    }
 
     if (uint32 mechanic = spellInfo->EffectMechanic[index])
     {
         SpellImmuneList const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
         for (const auto& itr : mechanicList)
+        {
             if (itr.type == spellInfo->EffectMechanic[index])
-                return true;
+            {
+                if (!spellInfo->IsPositiveEffect(index))
+                    return true;
+
+                SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+                if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
+        }
 
         AuraList const& immuneAuraApply = GetAurasByType(SPELL_AURA_MECHANIC_IMMUNITY_MASK);
         for (const auto& iter : immuneAuraApply)
+        {
             if (iter->GetModifier()->m_miscvalue & (1 << (mechanic - 1)))
-                return true;
+            {
+                if (!spellInfo->IsPositiveEffect(index))
+                    return true;
+
+                SpellEntry const* pImmunitySpell = iter->GetSpellProto();
+                if (pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
+        }
     }
 
     uint32 aura = spellInfo->EffectApplyAuraName[index];
@@ -5390,12 +5475,21 @@ bool Unit::IsImmuneToSpellEffect(SpellEntry const* spellInfo, SpellEffectIndex i
     {
         SpellImmuneList const& list = m_spellImmune[IMMUNITY_STATE];
         for (const auto& itr : list)
+        {
             if (itr.type == aura)
-                return true;
+            {
+                if (!spellInfo->IsPositiveEffect(index))
+                    return true;
+
+                SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+                if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
+        }
     }
 
     // Mechanical units are immune to normal heal effects. There is a separate one for them.
-    if ((effect == SPELL_EFFECT_HEAL || effect == SPELL_EFFECT_HEAL_MAX_HEALTH) &&
+    if ((effect == SPELL_EFFECT_HEAL || effect == SPELL_EFFECT_HEAL_MAX_HEALTH || aura == SPELL_AURA_PERIODIC_HEAL) &&
         (GetCreatureType() == CREATURE_TYPE_MECHANICAL))
         return true;
 
@@ -5409,13 +5503,18 @@ bool Unit::IsImmuneToSchool(SpellEntry const* spellInfo, uint8 effectMask) const
         SpellImmuneList const& schoolList = m_spellImmune[IMMUNITY_SCHOOL];
         for (auto itr : schoolList)
         {
-            SpellEntry const* pImmuneSpell = sSpellMgr.GetSpellEntry(itr.spellId);
-            if (pImmuneSpell && pImmuneSpell == spellInfo) // do not let itself immune out - fixes 39872 - Tidal Shield
+            SpellEntry const* pImmunitySpell = sSpellMgr.GetSpellEntry(itr.spellId);
+            if (pImmunitySpell && pImmunitySpell == spellInfo) // do not let itself immune out - fixes 39872 - Tidal Shield
                 continue;
 
-            if (!(pImmuneSpell && pImmuneSpell->IsPositiveSpell() && spellInfo->IsPositiveEffectMask(effectMask) && !pImmuneSpell->HasAttribute(SPELL_ATTR_EX_UNAFFECTED_BY_SCHOOL_IMMUNE)) &&
-                (itr.type & spellInfo->GetSpellSchoolMask()))
-                return true;
+            if (itr.type & spellInfo->GetSpellSchoolMask())
+            {
+                if (!spellInfo->IsPositiveEffectMask(effectMask))
+                    return true;
+
+                if (pImmunitySpell && pImmunitySpell->HasAttribute(SPELL_ATTR_EX_IMMUNITY_TO_HOSTILE_AND_FRIENDLY_EFFECTS))
+                    return true;
+            }
         }
     }
 
@@ -6999,7 +7098,7 @@ void Unit::SetDeathState(DeathState s)
 
         i_motionMaster.Clear(false, true);
         i_motionMaster.MoveIdle();
-        StopMoving(true);
+        StopMoving(IsMoving());
 
         // Powers are cleared on death.
         SetPower(GetPowerType(), 0);
@@ -7921,6 +8020,15 @@ CharmInfo* Unit::InitCharmInfo(Unit* charm)
     return m_charmInfo;
 }
 
+void Unit::ClearCharmInfo()
+{
+    if (CharmInfo* pInfo = m_charmInfo)
+    {
+        m_charmInfo = nullptr;
+        delete pInfo;
+    }
+}
+
 CharmInfo::CharmInfo(Unit* unit)
     : m_unit(unit), m_originalFactionTemplate(nullptr), m_commandState(COMMAND_FOLLOW), m_reactState(REACT_PASSIVE), m_petNumber(0),
       m_isCommandAttack(false), m_isCommandFollow(false), m_isAtStay(false), m_isFollowing(false), m_isReturning(false),
@@ -8611,16 +8719,12 @@ void Unit::StopMoving(bool force)
         return;
 
     Movement::MoveSplineInit init(*this, "StopMoving");
-    if (GenericTransport* t = GetTransport()) {
+    if (GenericTransport* t = GetTransport())
         init.SetTransport(t->GetGUIDLow());
-    }
 
-    if (!movespline->Finalized() || force) {
+    if (!movespline->Finalized() || force)
+    {
         init.SetStop(); // Will trigger CMSG_MOVE_SPLINE_DONE from client.
-        init.Launch();
-    }
-    else if (!IsPlayer()) {
-        init.SetFacing(GetOrientation());
         init.Launch();
     }
 
@@ -9167,26 +9271,6 @@ Unit* Unit::FindFriendlyUnitCC(float range) const
     return pUnit;
 }
 
-Player* Unit::FindNearestHostilePlayer(float range) const
-{
-    Player* target = nullptr;
-    MaNGOS::NearestHostileUnitCheck check(this, range);
-    MaNGOS::PlayerLastSearcher<MaNGOS::NearestHostileUnitCheck> searcher(target, check);
-    Cell::VisitWorldObjects(this, searcher, range);
-
-    return target;
-}
-
-Player* Unit::FindNearestFriendlyPlayer(float range) const
-{
-    Player* target = nullptr;
-    MaNGOS::NearestFriendlyUnitCheck check(this, range);
-    MaNGOS::PlayerLastSearcher<MaNGOS::NearestFriendlyUnitCheck> searcher(target, check);
-    Cell::VisitWorldObjects(this, searcher, range);
-
-    return target;
-}
-
 bool Unit::IsSecondaryThreatTarget() const
 {
     // Targets with Fear / Confuse / breakable CC
@@ -9353,8 +9437,7 @@ void Unit::NearLandTo(float x, float y, float z, float orientation)
 {
     m_movementInfo.RemoveMovementFlag(MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR);
     m_movementInfo.ChangePosition(x, y, z, orientation);
-    m_movementInfo.UpdateTime(WorldTimer::getMSTime());
-    m_movementInfo.ctime = 0; // Not a client packet. Pauses extrapolation.
+    m_movementInfo.SetAsServerSide();
 
     WorldPacket data(MSG_MOVE_FALL_LAND, 41);
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
@@ -9377,7 +9460,6 @@ void Unit::TeleportPositionRelocation(float x, float y, float z, float orientati
     {
         player->SetPosition(x, y, z, orientation, true);
         player->m_movementInfo.ChangePosition(x, y, z, orientation);
-        player->m_movementInfo.UpdateTime(WorldTimer::getMSTime());
     }
     else if (crea)
     {
@@ -10354,6 +10436,38 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
             || HasBreakableByDamageAuraType(SPELL_AURA_MOD_STUN, excludeAura)
             //|| HasBreakableByDamageAuraType(SPELL_AURA_MOD_ROOT, excludeAura)    // no breakable roots in vanilla
             || HasBreakableByDamageAuraType(SPELL_AURA_TRANSFORM, excludeAura));
+}
+
+void Unit::SetReactState(ReactStates state)
+{
+    if (CharmInfo* pCharmInfo = GetCharmInfo())
+        pCharmInfo->SetReactState(state);
+    else if (Creature* pCreature = ToCreature())
+        pCreature->SetCreatureReactState(state);
+    else
+        sLog.outError("SetReactState called for non-charmed player!");
+}
+
+ReactStates Unit::GetReactState() const
+{
+    if (CharmInfo* pCharmInfo = GetCharmInfo())
+        return pCharmInfo->GetReactState();
+
+    if (Creature const* pCreature = ToCreature())
+        return pCreature->GetCreatureReactState();
+
+    return REACT_DEFENSIVE;
+}
+
+bool Unit::HasReactState(ReactStates state) const
+{
+    if (CharmInfo* pCharmInfo = GetCharmInfo())
+        return pCharmInfo->HasReactState(state);
+
+    if (Creature const* pCreature = ToCreature())
+        return pCreature->HasCreatureReactState(state);
+
+    return state == REACT_DEFENSIVE;
 }
 
 void Unit::UpdateControl()

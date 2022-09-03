@@ -21,6 +21,7 @@
 #include "ObjectAccessor.h"
 #include "Language.h"
 #include "ObjectMgr.h"
+#include "ScriptMgr.h"
 #include "Util.h"
 #include "GameEventMgr.h"
 #include "GridNotifiers.h"
@@ -355,6 +356,13 @@ bool ChatHandler::HandleGameObjectDeleteCommand(char* args)
     if (!obj)
     {
         PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, lowguid);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    if (sScriptMgr.IsGameObjectGuidReferencedInScripts(obj->GetDBTableGUIDLow()))
+    {
+        SendSysMessage("You cannot delete this spawn because its guid is referenced in a script.");
         SetSentErrorMessage(true);
         return false;
     }

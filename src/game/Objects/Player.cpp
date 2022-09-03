@@ -546,7 +546,7 @@ void TradeData::SetAccepted(bool state, bool crosssend /*= false*/)
 //== Player ====================================================
 
 Player::Player(WorldSession* session) : Unit(),
-    m_mover(this), m_camera(this), m_reputationMgr(this),
+    m_mover(this), m_camera(this), m_reputationMgr(this), m_saveDisabled(false),
     m_enableInstanceSwitch(true), m_currentTicketCounter(0), m_castingSpell(0), m_repopAtGraveyardPending(false),
     m_honorMgr(this), m_bNextRelocationsIgnored(0), m_personalXpRate(-1.0f), m_isStandUpScheduled(false), m_foodEmoteTimer(0)
 {
@@ -695,7 +695,6 @@ Player::Player(WorldSession* session) : Unit(),
     worldMask = WORLD_DEFAULT_CHAR;
     i_AI = nullptr;
     m_cheatOptions = 0x0;
-    m_DbSaveDisabled = false;
 
     m_lastFromClientCastedSpellID = 0;
 
@@ -738,9 +737,6 @@ Player::~Player()
     CleanupChannels();
 
     delete PlayerTalkClass;
-
-    for (const auto& x : m_ItemSetEff)
-         delete x;
 
     // clean up player-instance binds, may unload some instance saves
     for (const auto& itr : m_boundInstances)
@@ -800,6 +796,7 @@ bool Player::ValidateAppearance(uint8 race, uint8 class_, uint8 gender, uint8 ha
 
 bool Player::Create(uint32 guidlow, std::string const& name, uint8 race, uint8 class_, uint8 gender, uint8 skin, uint8 face, uint8 hairStyle, uint8 hairColor, uint8 facialHair)
 {
+    m_saveDisabled = true; // only temporary bots are created this way
     Object::_Create(guidlow, 0, HIGHGUID_PLAYER);
 
     m_name = name;
@@ -2460,7 +2457,6 @@ bool Player::ExecuteTeleportFar(ScheduledTeleportData* data)
                     data << m_teleport_dest.o;
                 }
                 GetSession()->SendPacket(&data);
-                SendMovementMessageToSet(std::move(data), true);
                 SendSavedInstances();
             };
             if (data->recover)
@@ -5030,8 +5026,7 @@ Corpse* Player::CreateCorpse()
     }
 
     // we not need saved corpses for BG/arenas
-    if (!GetMap()->IsBattleGround() &&
-        !IsBot())
+    if (!GetMap()->IsBattleGround() && !IsSavingDisabled())
         corpse->SaveToDB();
 
     // register for player, but not show
@@ -5273,7 +5268,7 @@ void Player::RepopAtGraveyard()
     if (IsAlive())
     {
         if (ClosestGrave)
-            TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, orientation, 0, std::move(recover));
+            TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, orientation, TELE_TO_NOT_UNSUMMON_PET, std::move(recover));
     }
     else
     {
@@ -5287,7 +5282,7 @@ void Player::RepopAtGraveyard()
                 GetTransport()->RemovePassenger(this);
                 ResurrectPlayer(1.0f);
             }
-            TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, orientation, 0, std::move(recover));
+            TeleportTo(ClosestGrave->map_id, ClosestGrave->x, ClosestGrave->y, ClosestGrave->z, orientation, TELE_TO_NOT_UNSUMMON_PET, std::move(recover));
         }
 
         // Fix invisible spirit healer if you die close to graveyard.
@@ -6423,28 +6418,32 @@ void Player::CheckAreaExploreAndOutdoor()
                 SetRestType(REST_TYPE_NO);
             }
         }
-        // On reapplique les sorts retires lorsque l'on entre une zone interieure
+        // Check if we need to reaply outdoor only passive spells
         if (sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK))
         {
-            // Celerite feline - Druide
-            if (GetShapeshiftForm() == FORM_CAT)
+            const PlayerSpellMap& spells = GetSpellMap();
+            for (const auto& itr : spells)
             {
-                PlayerSpellMap const& sp_list = GetSpellMap();
-                for (const auto& itr : sp_list)
+                if (itr.second.state == PLAYERSPELL_REMOVED)
+                    continue;
+                SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(itr.first);
+                if (!spellInfo || !spellInfo->IsNeedCastSpellAtOutdoor() || HasAura(itr.first))
+                    continue;
+                if ((spellInfo->Stances || spellInfo->StancesNot) && !spellInfo->IsNeedCastSpellAtFormApply(GetShapeshiftForm()))
+                    continue;
+                CastSpell(this, spellInfo, true);
+            }
+            for (auto& setData : m_itemSetEffects)
+            {
+                for (auto spellInfo : setData.second.spells)
                 {
-                    if (itr.second.state == PLAYERSPELL_REMOVED)
+                    if (!spellInfo || !spellInfo->IsNeedCastSpellAtOutdoor() || HasAura(spellInfo->Id))
                         continue;
-                    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(itr.first);
-                    if (!spellInfo || !spellInfo->IsNeedCastSpellAtFormApply(GetShapeshiftForm()) ||
-                            !(spellInfo->Attributes & SPELL_ATTR_OUTDOORS_ONLY) ||
-                            HasAura(spellInfo->Id))
+                    if ((spellInfo->Stances || spellInfo->StancesNot) && !spellInfo->IsNeedCastSpellAtFormApply(GetShapeshiftForm()))
                         continue;
-                    CastSpell(this, itr.first, true);
+                    CastSpell(this, spellInfo, true);
                 }
             }
-            // Rapidite bestiale - Chasseur
-            if (HasSpell(19596) && !HasAura(19596))
-                CastSpell(this, 19596, true);
         }
     }
     else if (sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK) && !IsGameMaster())
@@ -7480,12 +7479,9 @@ void Player::UpdateEquipSpellsAtFormChange()
     }
 
     // item set bonuses not dependent from item broken state
-    for (const auto eff : m_ItemSetEff)
+    for (auto& setData : m_itemSetEffects)
     {
-        if (!eff)
-            continue;
-
-        for (const auto spellInfo : eff->spells)
+        for (const auto spellInfo : setData.second.spells)
         {
             if (!spellInfo)
                 continue;
@@ -7635,6 +7631,25 @@ void Player::CastItemUseSpell(Item* item, SpellCastTargets const& targets)
 
         ++count;
     }
+}
+
+ItemSetEffect* Player::GetItemSetEffect(uint32 setId)
+{
+    auto itr = m_itemSetEffects.find(setId);
+    if (itr == m_itemSetEffects.end())
+        return nullptr;
+
+    return &itr->second;
+}
+
+ItemSetEffect* Player::AddItemSetEffect(uint32 setId)
+{
+    return &m_itemSetEffects.emplace(setId, ItemSetEffect()).first->second;
+}
+
+void Player::RemoveItemSetEffect(uint32 setId)
+{
+    m_itemSetEffects.erase(setId);
 }
 
 void Player::_RemoveAllItemMods()
@@ -7900,6 +7915,7 @@ void Player::SendLoot(ObjectGuid guid, LootType loot_type, Player* pVictim)
                     }
 
                     loot->FillLoot(lootid, LootTemplates_Gameobject, this, !groupRules, false);
+                    loot->GenerateMoneyLoot(go->GetGOInfo()->MinMoneyLoot, go->GetGOInfo()->MaxMoneyLoot);
                     if (go->GetInstanceId())
                         go->GetMap()->BindToInstanceOrRaid(this, go->GetRespawnTimeEx(), false);
 
@@ -7950,7 +7966,7 @@ void Player::SendLoot(ObjectGuid guid, LootType loot_type, Player* pVictim)
                         break;
                     default:
                         loot->FillLoot(item->GetEntry(), LootTemplates_Item, this, true, item->GetProto()->MaxMoneyLoot == 0);
-                        loot->generateMoneyLoot(item->GetProto()->MinMoneyLoot, item->GetProto()->MaxMoneyLoot);
+                        loot->GenerateMoneyLoot(item->GetProto()->MinMoneyLoot, item->GetProto()->MaxMoneyLoot);
                         item->SetLootState(ITEM_LOOT_CHANGED);
                         item->SetGeneratedLoot(true);
                         break;
@@ -15320,7 +15336,8 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder* holder)
                     SetAcceptWhispers(true);
                 break;
         }
-        SetCheatGod(true);
+
+        SetCheatGod(sWorld.getConfig(CONFIG_BOOL_GM_CHEAT_GOD));
     }
 
     if (extraflags & PLAYER_EXTRA_WHISP_RESTRICTION)
@@ -16517,12 +16534,10 @@ void Player::SaveToDB(bool online, bool force)
     m_nextSave = sWorld.getConfig(CONFIG_UINT32_INTERVAL_SAVE);
 
     // Do not save bots
-    if (IsBot())
-        return;
-    if (m_DbSaveDisabled)
+    if (IsSavingDisabled())
         return;
 
-    //lets allow only players in world to be saved
+    // lets allow only players in world to be saved
     if (!force && IsBeingTeleportedFar())
     {
         ScheduleDelayedOperation(DELAYED_SAVE_PLAYER);
@@ -16721,6 +16736,9 @@ void Player::SaveToDB(bool online, bool force)
 // relogging before the query completes
 void Player::SaveInventoryAndGoldToDB()
 {
+    if (IsSavingDisabled())
+        return;
+
     bool haveTransaction = CharacterDatabase.InTransaction();
     if (!haveTransaction)
         CharacterDatabase.BeginTransaction(GetGUIDLow());
@@ -16738,6 +16756,9 @@ void Player::SaveInventoryAndGoldToDB()
 // relogging before the query completes
 void Player::SaveGoldToDB()
 {
+    if (IsSavingDisabled())
+        return;
+
     static SqlStatementID updateGold ;
 
     SqlStatement stmt = CharacterDatabase.CreateStatement(updateGold, "UPDATE `characters` SET `money` = ? WHERE `guid` = ?");
@@ -17125,8 +17146,8 @@ void Player::_SaveStats()
 
     stmt = CharacterDatabase.CreateStatement(insertStats, "INSERT INTO `character_stats` (`guid`, `max_health`, `max_power1`, `max_power2`, `max_power3`, `max_power4`, `max_power5`, "
             "`strength`, `agility`, `stamina`, `intellect`, `spirit`, `armor`, `holy_res`, `fire_res`, `nature_res`, `frost_res`, `shadow_res`, `arcane_res`, "
-            "`block_chance`, `dodge_chance`, `parry_chance`, `crit_chance`, `ranged_crit_chance`, `attack_power`, `ranged_attack_power`) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            "`block_chance`, `dodge_chance`, `parry_chance`, `crit_chance`, `ranged_crit_chance`, `spell_crit_chance`, `attack_power`, `ranged_attack_power`, `spell_damage`, `spell_healing`) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     stmt.addUInt32(GetGUIDLow());
     stmt.addUInt32(GetMaxHealth());
@@ -17142,8 +17163,11 @@ void Player::_SaveStats()
     stmt.addFloat(GetFloatValue(PLAYER_PARRY_PERCENTAGE));
     stmt.addFloat(GetFloatValue(PLAYER_CRIT_PERCENTAGE));
     stmt.addFloat(GetFloatValue(PLAYER_RANGED_CRIT_PERCENTAGE));
+    stmt.addFloat(GetSpellCritPercent(SPELL_SCHOOL_HOLY));
     stmt.addUInt32(GetUInt32Value(UNIT_FIELD_ATTACK_POWER));
     stmt.addUInt32(GetUInt32Value(UNIT_FIELD_RANGED_ATTACK_POWER));
+    stmt.addUInt32(GetUInt32Value(PLAYER_FIELD_MOD_DAMAGE_DONE_POS + 1));
+    stmt.addUInt32(GetTotalAuraModifier(SPELL_AURA_MOD_HEALING_DONE));
 
     stmt.Execute();
 }
@@ -17474,7 +17498,7 @@ void Player::PetSpellInitialize()
     WorldPacket data(SMSG_PET_SPELLS, 8 + 4 + 1 + 1 + 2 + 4 * MAX_UNIT_ACTION_BAR_INDEX + 1 + 1);
     data << pet->GetObjectGuid();
     data << uint32(0);
-    data << uint8(pet->GetReactState());
+    data << uint8(charmInfo->GetReactState());
     data << uint8(charmInfo->GetCommandState());
     data << uint8(0);
     data << uint8(pet->IsEnabled() ? 0x0 : 0x8);
@@ -17521,9 +17545,20 @@ void Player::PossessSpellInitialize()
         return;
     }
 
+    int32 duration = 0;
+    auto const& possesAuras = charm->GetAurasByType(SPELL_AURA_MOD_POSSESS);
+    for (auto const& aura : possesAuras)
+    {
+        if (aura->GetCasterGuid() == GetObjectGuid() && aura->GetAuraDuration() > 0)
+        {
+            duration = aura->GetAuraDuration();
+            break;
+        }
+    }
+
     WorldPacket data(SMSG_PET_SPELLS, 8 + 4 + 4 + 4 * MAX_UNIT_ACTION_BAR_INDEX + 1 + 1);
     data << charm->GetObjectGuid();
-    data << uint32(0);
+    data << int32(duration);
     data << uint32(0);
 
     charmInfo->BuildActionBar(&data);
@@ -17564,11 +17599,24 @@ void Player::CharmSpellInitialize()
         }
     }
 
+    int32 duration = 0;
+    auto const& charmAuras = charm->GetAurasByType(SPELL_AURA_MOD_CHARM);
+    for (auto const& aura : charmAuras)
+    {
+        if (aura->GetCasterGuid() == GetObjectGuid() && aura->GetAuraDuration() > 0)
+        {
+            duration = aura->GetAuraDuration();
+            break;
+        }
+    }
+
     WorldPacket data(SMSG_PET_SPELLS, 8 + 4 + 1 + 1 + 2 + 4 * MAX_UNIT_ACTION_BAR_INDEX + 1 + 4 * addlist + 1);
     data << charm->GetObjectGuid();
-    data << uint32(0x00000000);
-
-    data << uint8(charmInfo->GetReactState()) << uint8(charmInfo->GetCommandState()) << uint16(0);
+    data << int32(duration);
+    data << uint8(charmInfo->GetReactState());
+    data << uint8(charmInfo->GetCommandState());
+    data << uint8(0);
+    data << uint8(0);
 
     charmInfo->BuildActionBar(&data);
 
@@ -20385,6 +20433,22 @@ void Player::LearnSpellHighRank(uint32 spellid)
     sSpellMgr.doForHighRanks(spellid, worker);
 }
 
+
+uint32 Player::GetSpellRank(SpellEntry const* spellInfo) const
+{
+    SkillLineAbilityMapBounds bounds = sSpellMgr.GetSkillLineAbilityMapBoundsBySpellId(spellInfo->Id);
+    if (bounds.first != bounds.second)
+    {
+        SkillLineAbilityEntry const* skillInfo = bounds.first->second;
+        uint32 spellRank = GetSkillValue(skillInfo->skillId);
+        if (spellInfo->maxLevel > 0 && spellRank >= spellInfo->maxLevel * 5)
+            spellRank = spellInfo->maxLevel * 5;
+        return spellRank;
+    }
+    else
+        return 0;
+}
+
 void Player::_LoadSkills(QueryResult* result)
 {
     //                                                           0      1      2
@@ -20933,11 +20997,11 @@ void Player::RemoveTemporaryAI()
 {
     PlayerBotEntry* pBot = GetSession()->GetBot();
 
-    if (!pBot || (pBot->ai != AI()))
+    if (!pBot || (pBot->ai.get() != AI()))
         RemoveAI();
 
-    if (pBot && (pBot->ai != AI()))
-        SetAI(pBot->ai);
+    if (pBot && (pBot->ai.get() != AI()))
+        SetAI(pBot->ai.get());
 }
 
 void Player::SetControlledBy(Unit* pWho)
@@ -20947,7 +21011,7 @@ void Player::SetControlledBy(Unit* pWho)
         PlayerBotEntry* pBot = GetSession()->GetBot();
 
         // Careful not to delete bot ai
-        if (!pBot || (pBot->ai != i_AI))
+        if (!pBot || (pBot->ai.get() != i_AI))
             delete i_AI;
 
         i_AI = nullptr;
@@ -20960,6 +21024,12 @@ void Player::SetControlledBy(Unit* pWho)
 
 bool Player::ChangeRace(uint8 newRace)
 {
+    if (IsSavingDisabled() || IsBot())
+    {
+        sLog.outError("Cannot change race of bot or temporary character!");
+        return false;
+    }
+
     PlayerInfo const* info = sObjectMgr.GetPlayerInfo(newRace, GetClass());
     if (!info)
         return false;
@@ -20967,14 +21037,14 @@ bool Player::ChangeRace(uint8 newRace)
     uint8 oldRace = GetRace();
     bool bChangeTeam = (TeamForRace(oldRace) != TeamForRace(newRace));
 
-    m_DbSaveDisabled = true;
+    m_saveDisabled = true;
     if (!ChangeSpellsForRace(oldRace, newRace))
     {
         CHANGERACE_ERR("Cannot change spells.");
         return false;
     }
 
-    // Le chanegement de race en lui meme.
+    // Change the race
     SetByteValue(UNIT_FIELD_BYTES_0, UNIT_BYTES_0_OFFSET_RACE, newRace);
     LearnDefaultSpells();
 
@@ -20995,17 +21065,18 @@ bool Player::ChangeRace(uint8 newRace)
         CHANGERACE_ERR("Cannot change items.");
         return false;
     }
-    /*
-    On sauvegarde le changement de faction, et apres faut deco-reco.
-    */
-    m_DbSaveDisabled = false;
-    // Suppression des montures mises
+
+    // Unmount in case of faction specific mount
     RemoveSpellsCausingAura(SPELL_AURA_MOUNTED);
+
+    // Save with the new race
+    m_saveDisabled = false;
     SaveToDB();
-    m_DbSaveDisabled = true;
+    m_saveDisabled = true;
+
     if (bChangeTeam)
     {
-        // Changement de HomeBind / Teleportation capitale
+        // Change home location to capital city
         if (TeamForRace(newRace) == ALLIANCE)
         {
             SavePositionInDB(GetObjectGuid(), 0, -8867.68f, 673.373f, 97.9034f, 0.0f, 1519);

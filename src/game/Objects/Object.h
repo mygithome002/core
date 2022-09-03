@@ -188,6 +188,17 @@ class MovementInfo
         void ChangeOrientation(float o) { pos.o = o; }
         void ChangePosition(float x, float y, float z, float o) { pos.x = x; pos.y = y; pos.z = z; pos.o = o; }
         void UpdateTime(uint32 _time) { stime = _time; }
+        void SetAsServerSide()
+        { 
+            uint32 const oldTime = stime;
+            stime = WorldTimer::getMSTime();
+
+            // Preserve order of server side packets.
+            if (oldTime >= stime)
+                stime = oldTime + 1;
+
+            ctime = 0; // Not a client packet. Pauses extrapolation.
+        }
 
         struct JumpInfo
         {
@@ -881,6 +892,8 @@ class WorldObject : public Object
         GameObject* FindNearestGameObject(uint32 entry, float range) const;
         GameObject* FindRandomGameObject(uint32 entry, float range) const;
         Player* FindNearestPlayer(float range) const;
+        Player* FindNearestHostilePlayer(float range) const;
+        Player* FindNearestFriendlyPlayer(float range) const;
         void GetGameObjectListWithEntryInGrid(std::list<GameObject*>& lList, uint32 uiEntry, float fMaxSearchRange) const;
         void GetCreatureListWithEntryInGrid(std::list<Creature*>& lList, uint32 uiEntry, float fMaxSearchRange) const;
         void GetAlivePlayerListInRange(WorldObject const* pSource, std::list<Player*>& lList, float fMaxSearchRange) const;

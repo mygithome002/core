@@ -695,10 +695,19 @@ void Spell::prepareDataForTriggerSystem()
     m_procAttacker = PROC_FLAG_NONE;
     m_procVictim = PROC_FLAG_NONE;
 
-    if (m_spellInfo->AttributesEx3 & SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS)
+    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS) && 
+        m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS))
         m_canTrigger = false;         // Explicitly not allowed to trigger
     else if (m_CastItem)
-        m_canTrigger = false;         // Do not trigger from item cast spell
+    {
+        // Negative item effects do trigger procs. 
+        // Confirmed with Vengeance: Fiery Plate Gauntlets, Storm Gauntlets, Dark Iron Bomb, Force Reactive Disk, Judgement Set 8 Piece Bonus
+        // Flash Bomb also needs to trigger procs to remove Fear Ward.
+        if (!m_spellInfo->IsPositiveSpell())
+            m_canTrigger = true;
+        else
+            m_canTrigger = false;
+    }
     else if (m_originalCasterGUID.IsGameObject())   // Do not trigger anything if the spell is casted by using a game object (eg. Lightwell)
         m_canTrigger = false;
     else if (!m_IsTriggeredSpell)
@@ -748,11 +757,6 @@ void Spell::prepareDataForTriggerSystem()
             case SPELLFAMILY_PRIEST:
                 // Touch of Weakness / Devouring Plague
                 if (m_spellInfo->IsFitToFamilyMask<CF_PRIEST_TOUCH_OF_WEAKNESS, CF_PRIEST_DEVOURING_PLAGUE>())
-                    m_canTrigger = true;
-                break;
-            case SPELLFAMILY_GENERIC:
-                // Flash Bomb must be able to trigger Fear Ward
-                if (m_CastItem && m_spellInfo->Mechanic == MECHANIC_FEAR)
                     m_canTrigger = true;
                 break;
             default:
@@ -896,7 +900,6 @@ void Spell::prepareDataForTriggerSystem()
         if (m_spellInfo->Effect[i] == SPELL_EFFECT_SCHOOL_DAMAGE && m_spellInfo->EffectImplicitTargetA[i] == TARGET_UNIT_CASTER)
             m_negativeEffectMask |= (1 << i);
     }
-
 }
 
 void Spell::CleanupTargetList()
@@ -1061,6 +1064,23 @@ void Spell::AddGOTarget(GameObject* pTarget, SpellEffectIndex effIndex)
 {
     if (m_spellInfo->Effect[effIndex] == 0)
         return;
+
+    // do not exceed max gobject targets
+    if (m_spellInfo->MaxAffectedTargets)
+    {
+        uint32 targetsForEffect = 0;
+        for (auto& ihit : m_UniqueGOTargetInfo)
+        {
+            if (ihit.deleted)
+                continue;
+
+            if (ihit.effectMask & (1 << effIndex))
+                targetsForEffect++;
+        }
+
+        if (targetsForEffect >= m_spellInfo->MaxAffectedTargets)
+            return;
+    }
 
     ObjectGuid targetGUID = pTarget->GetObjectGuid();
 
@@ -1382,7 +1402,14 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
                 }
             }
 
-            pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget, pRealCaster ? procAttacker : PROC_FLAG_NONE, m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim, procEx, addhealth, m_attackType, spellInfo, this));
+            pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget, 
+                pRealCaster && !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS) ? procAttacker : PROC_FLAG_NONE,
+                m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
+                procEx,
+                addhealth,
+                m_attackType,
+                spellInfo,
+                this));
         }
 
         int32 gain = pCaster->DealHeal(unitTarget, addhealth, m_spellInfo, crit);
@@ -1453,10 +1480,6 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
         procEx = CreateProcExtendMask(&damageInfo, missInfo);
         procVictim |= PROC_FLAG_TAKEN_ANY_DAMAGE;
 
-        // (HACK) trigger Vengeance on weapon crits for Paladins
-        // item procs should probably trigger for all classes, e.g. Judgement of Wisdom, but many issues to test for first. Paladin exclusive for now.
-        if (m_CastItem && m_casterUnit && m_casterUnit->GetClass() == CLASS_PALADIN && (procEx & PROC_EX_CRITICAL_HIT) && !(m_spellInfo->AttributesEx3 & SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS))
-            m_canTrigger = true;
         // JoR and JoC: Paladin melee spells trigger melee procs instead of magic
         if ((m_spellInfo->IsFitToFamilyMask<CF_PALADIN_JUDGEMENT_OF_RIGHTEOUSNESS>() && m_spellInfo->SpellIconID == 25) || 
             (m_spellInfo->SpellFamilyName == SPELLFAMILY_PALADIN && m_spellInfo->SpellIconID == 561 && m_spellInfo->SpellVisual == 0))
@@ -1466,8 +1489,17 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
         }
         // Do triggers for unit (reflect triggers passed on hit phase for correct drop charge)
         if (m_canTrigger)
-            pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget, pRealCaster ? procAttacker : PROC_FLAG_NONE, m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim, procEx, damageInfo.damage, m_attackType, m_spellInfo, this));
-        
+        {
+            pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget,
+                pRealCaster && !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS) ? procAttacker : PROC_FLAG_NONE,
+                m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
+                procEx,
+                damageInfo.damage,
+                m_attackType,
+                m_spellInfo,
+                this));
+        }
+
         if (!triggerWeaponProcs && m_caster->IsPlayer())
         {
             // trigger mainhand weapon procs for shield attacks (Shield Bash, Shield Slam) NOTE: vanilla only mechanic, patched out in 2.0.1
@@ -1571,7 +1603,14 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
             }
         }
 
-        pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget, pRealCaster ? procAttacker : PROC_FLAG_NONE, m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim, procEx, dmg, m_attackType, m_spellInfo, this));
+        pCaster->ProcDamageAndSpell(ProcSystemArguments(unitTarget,
+            pRealCaster && !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS) ? procAttacker : PROC_FLAG_NONE,
+            m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
+            procEx,
+            dmg,
+            m_attackType,
+            m_spellInfo,
+            this));
     }
 
     if (triggerWeaponProcs && m_caster->IsPlayer())
@@ -1682,7 +1721,9 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
 
             // for delayed spells ignore not visible explicit target
             if (m_delayed && unit == m_targets.getUnitTarget() &&
-               !unit->IsVisibleForOrDetect(m_caster, m_caster, false))
+               !unit->IsVisibleForOrDetect(m_caster, m_caster, false) &&
+                // dead creatures don't see alive players, but spells should still hit
+                !(unit->IsPlayer() && unit->IsAlive() && m_caster->IsCreature() && m_casterUnit->IsDead()))
             {
                 pRealCaster->SendSpellMiss(unit, m_spellInfo->Id, SPELL_MISS_EVADE);
                 ResetEffectDamageAndHeal();
@@ -3528,7 +3569,7 @@ SpellCastResult Spell::prepare(Aura* triggeredByAura, uint32 chance)
         prepareDataForTriggerSystem();
 
         // calculate cast time (calculated after first CheckCast check to prevent charge counting for first CheckCast fail)
-        m_casttime = m_spellInfo->GetCastTime(this);
+        m_casttime = m_spellInfo->GetCastTime(m_caster, this);
 
         if (Player* pPlayerCaster = m_caster->ToPlayer())
             if (pPlayerCaster->HasCheatOption(PLAYER_CHEAT_NO_CAST_TIME))
@@ -3875,7 +3916,7 @@ void Spell::cast(bool skipCheck)
     InitializeDamageMultipliers();
 
     // Trigger procs on cast end for caster.
-    if (m_canTrigger && m_casterUnit)
+    if (m_canTrigger && m_casterUnit && !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS))
     {
         uint32 procEx = PROC_EX_CAST_END;
         Unit* pTarget = m_targets.getUnitTarget() ? m_targets.getUnitTarget() : m_casterUnit;
@@ -5602,7 +5643,7 @@ SpellCastResult Spell::CheckCast(bool strict)
         }
 
         // Loatheb Corrupted Mind spell failed
-        if (!m_IsCastByItem && !m_IsTriggeredSpell)
+        if (!m_CastItem && !m_IsTriggeredSpell)
         {
             Unit::AuraList const& auraClassScripts = m_casterUnit->GetAurasByType(SPELL_AURA_OVERRIDE_CLASS_SCRIPTS);
             for (const auto auraClassScript : auraClassScripts)
@@ -6065,7 +6106,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                             m_spellInfo->EffectImplicitTargetB[j] == TARGET_UNIT_SCRIPT_NEAR_CASTER)
                         {
                             // Fixes Toss Fuel on Bonfire (28806) and Dominion of Soul (16053)
-                            if (m_IsCastByItem)
+                            if (m_CastItem)
                                 m_targets.setUnitTarget(creatureScriptTarget);
 
                             AddUnitTarget(creatureScriptTarget, SpellEffectIndex(j));                            
@@ -6264,7 +6305,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                 }
 
                 if (plrCaster->GetPetGuid() || plrCaster->GetCharmGuid() ||
-                   (!plrCaster->IsBot() &&
+                   (!plrCaster->IsSavingDisabled() &&
                     sCharacterDatabaseCache.GetCharacterPetByOwner(plrCaster->GetGUIDLow())))
                 {
                     plrCaster->SendPetTameFailure(PETTAME_ANOTHERSUMMONACTIVE);
@@ -7169,7 +7210,7 @@ SpellCastResult Spell::CheckCasterAuras() const
                 SpellAuraHolder* holder = itr.second;
                 SpellEntry const* pEntry = holder->GetSpellProto();
 
-                if ((pEntry->GetSpellSchoolMask() & school_immune) && !(pEntry->AttributesEx & SPELL_ATTR_EX_UNAFFECTED_BY_SCHOOL_IMMUNE))
+                if (pEntry->GetSpellSchoolMask() & school_immune)
                     continue;
                 if ((1 << (pEntry->Dispel)) & dispel_immune)
                     continue;
@@ -7391,7 +7432,7 @@ uint32 Spell::CalculatePowerCost(SpellEntry const* spellInfo, Unit* caster, Spel
     }
 
     // Base powerCost
-    int32 powerCost = spellInfo->manaCost;
+    int32 powerCost = spellInfo->manaCost + spellInfo->manaCostPerlevel * (int32(caster->GetSpellRank(spellInfo)) / 5 - spellInfo->baseLevel);
     // PCT cost from total amount
     if (spellInfo->ManaCostPercentage)
     {
@@ -8722,7 +8763,7 @@ void Spell::OnSpellLaunch()
     }
     
     bool triggerAutoAttack = unitTarget != m_casterUnit && !m_spellInfo->IsPositiveSpell() && !(m_spellInfo->Attributes & SPELL_ATTR_STOP_ATTACK_TARGET);
-    m_casterUnit->GetMotionMaster()->MoveCharge(unitTarget, GetSpellBatchingEffectDelay(unitTarget), triggerAutoAttack);
+    m_casterUnit->GetMotionMaster()->MoveCharge(unitTarget, m_delayed ? GetSpellBatchingEffectDelay(unitTarget) : 0, triggerAutoAttack);
 }
 
 bool Spell::HasModifierApplied(SpellModifier* mod)

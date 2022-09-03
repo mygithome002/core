@@ -206,6 +206,7 @@ bool World::RemoveSession(uint32 id)
     {
         if (itr->second->PlayerLoading())
             return false;
+
         itr->second->KickPlayer();
     }
 
@@ -595,6 +596,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_GM_ACCEPT_TICKETS,    "GM.AcceptTickets", 2);
     setConfig(CONFIG_UINT32_GM_CHAT,              "GM.Chat",          2);
     setConfig(CONFIG_UINT32_GM_WISPERING_TO,      "GM.WhisperingTo",  2);
+    setConfig(CONFIG_BOOL_GM_CHEAT_GOD,           "GM.CheatGod",      true);
     setConfig(CONFIG_UINT32_GM_LEVEL_IN_GM_LIST,  "GM.InGMList.Level",  SEC_ADMINISTRATOR);
     setConfig(CONFIG_UINT32_GM_LEVEL_IN_WHO_LIST, "GM.InWhoList.Level", SEC_ADMINISTRATOR);
     setConfig(CONFIG_BOOL_GM_LOG_TRADE,           "GM.LogTrade", false);
@@ -698,6 +700,8 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_BOOL_DEATH_BONES_BG,                 "Death.Bones.Battleground", true);
     setConfigMinMax(CONFIG_FLOAT_GHOST_RUN_SPEED_WORLD,   "Death.Ghost.RunSpeed.World", 1.0f, 0.1f, 10.0f);
     setConfigMinMax(CONFIG_FLOAT_GHOST_RUN_SPEED_BG,      "Death.Ghost.RunSpeed.Battleground", 1.0f, 0.1f, 10.0f);
+
+    setConfig(CONFIG_UINT32_PVP_POOL_SIZE_PER_FACTION, "PvP.PoolSizePerFaction", 0);
 
     setConfig(CONFIG_UINT32_AV_MIN_PLAYERS_IN_QUEUE, "Alterac.MinPlayersInQueue", 0);
     setConfig(CONFIG_UINT32_AV_INITIAL_MAX_PLAYERS,  "Alterac.InitMaxPlayers", 0);
@@ -2339,7 +2343,7 @@ BanReturn World::BanAccount(BanMode mode, std::string nameOrIP, uint32 duration_
     std::string safe_author = author;
     LoginDatabase.escape_string(safe_author);
 
-    PlayerCacheData* authorData = sObjectMgr.GetPlayerDataByName(author);
+    PlayerCacheData const* authorData = sObjectMgr.GetPlayerDataByName(author);
 
     BanQueryHolder* holder = new BanQueryHolder(mode, nameOrIP, duration_secs, reason, realmID, safe_author,
         authorData ? authorData->uiAccount : 0);

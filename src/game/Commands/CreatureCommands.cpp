@@ -162,7 +162,12 @@ bool ChatHandler::HandleNpcAIInfoCommand(char* /*args*/)
                     strAI.empty() ? " - " : strAI.c_str(),
                     cstrAIClass ? cstrAIClass : " - ",
                     strScript.empty() ? " - " : strScript.c_str());
-    PSendSysMessage("React State: %s", ReactStateToString(pTarget->GetReactState()));
+    PSendSysMessage("React State: %s", ReactStateToString(pTarget->GetCreatureReactState()));
+    if (CharmInfo* pCharmInfo = pTarget->GetCharmInfo())
+    {
+        PSendSysMessage("Charm React State: %s", ReactStateToString(pCharmInfo->GetReactState()));
+        PSendSysMessage("Charm Command State: %s", CommandStateToString(pCharmInfo->GetCommandState()));
+    }
     PSendSysMessage(LANG_NPC_AI_MOVE, GetOnOffStr(pTarget->AI()->IsCombatMovementEnabled()));
     PSendSysMessage(LANG_NPC_AI_ATTACK, GetOnOffStr(pTarget->AI()->IsMeleeAttackEnabled()));
     MovementGeneratorType moveType = pTarget->GetMotionMaster()->GetCurrentMovementGeneratorType();
@@ -823,6 +828,13 @@ bool ChatHandler::HandleNpcDeleteCommand(char* args)
     if (!unit)
     {
         SendSysMessage(LANG_SELECT_CREATURE);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    if (sScriptMgr.IsCreatureGuidReferencedInScripts(unit->GetDBTableGUIDLow()))
+    {
+        SendSysMessage("You cannot delete this spawn because its guid is referenced in a script.");
         SetSentErrorMessage(true);
         return false;
     }
