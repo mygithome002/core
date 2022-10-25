@@ -714,7 +714,7 @@ void Spell::prepareDataForTriggerSystem()
         m_canTrigger = true;          // Normal cast - can trigger
     else if (!m_triggeredByAuraSpell)
         m_canTrigger = true;          // Triggered from SPELL_EFFECT_TRIGGER_SPELL - can trigger
-    else if (m_spellInfo->HasAttribute(SPELL_ATTR_EX2_TRIGGERED_CAN_TRIGGER_PROC) || m_spellInfo->HasAttribute(SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_SPECIAL))
+    else if (m_spellInfo->HasAttribute(SPELL_ATTR_EX3_NOT_A_PROC))
         m_canTrigger = true;          // Spells with these special attributes can trigger even if triggeredByAuraSpell
 
     if (!m_canTrigger)                // Exceptions (some periodic triggers)
@@ -1769,7 +1769,9 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
                     pRealUnitCaster->SetOutOfCombatWithVictim(unit);
                 }
             }
-            else if (pRealUnitCaster)
+            else if (pRealUnitCaster &&
+                   !(m_spellInfo->HasAttribute(SPELL_ATTR_CANT_USED_IN_COMBAT) && 
+                     m_spellInfo->HasAttribute(SPELL_ATTR_EX_NOT_IN_COMBAT_TARGET)))
             {
                 // make sure caster is flagged in pvp case
                 pRealUnitCaster->SetOutOfCombatWithVictim(unit);
@@ -1792,7 +1794,7 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
             {
                 if (unit->IsInCombat())
                 {
-                    if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NO_INITIAL_THREAT))
+                    if (!IsTriggeredByAura() && !m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NO_INITIAL_THREAT))
                     {
                         pRealUnitCaster->SetInCombatWithAssisted(unit);
                         unit->GetHostileRefManager().threatAssist(pRealUnitCaster, 0.0f, m_spellInfo);
@@ -2390,8 +2392,16 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
         }
         case TARGET_UNIT_CASTER_PET:
         {
-            Pet* tmpUnit = m_casterUnit ? m_casterUnit->GetPet() : nullptr;
-            if (!tmpUnit) break;
+            Unit* tmpUnit = nullptr;
+            if (m_casterUnit)
+            {
+                tmpUnit = m_casterUnit->GetPet();
+                if (!tmpUnit)
+                    tmpUnit = ToCreature(m_casterUnit->GetCharm());
+            }
+            if (!tmpUnit)
+                break;
+
             targetUnitMap.push_back(tmpUnit);
             break;
         }
@@ -2634,7 +2644,7 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
                 m_targets.getDestination(x, y, z);
 
             if (x == 0.0f && y == 0.0f && z == 0.0f)
-                sLog.outError("Coordinates were not set properly for spell %u with target type %u!", m_spellInfo->Id, targetMode);
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Coordinates were not set properly for spell %u with target type %u!", m_spellInfo->Id, targetMode);
 
             // It may be possible to fill targets for some spell effects
             // automatically (SPELL_EFFECT_WMO_REPAIR(88) for example) but
@@ -3126,10 +3136,10 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
                 if (st->mapId == m_caster->GetMapId())
                     m_targets.setDestination(st->x, st->y, st->z);
                 else
-                    sLog.outError("SPELL: wrong map (%u instead %u) target coordinates for spell ID %u", st->mapId, m_caster->GetMapId(), m_spellInfo->Id);
+                    sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "SPELL: wrong map (%u instead %u) target coordinates for spell ID %u", st->mapId, m_caster->GetMapId(), m_spellInfo->Id);
             }
             else
-                sLog.outError("SPELL: unknown target coordinates for spell ID %u", m_spellInfo->Id);
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "SPELL: unknown target coordinates for spell ID %u", m_spellInfo->Id);
             break;
         }
         case TARGET_LOCATION_UNIT_MINION_POSITION: // unknown how pet summon is different - maybe some formation support?
@@ -3418,7 +3428,7 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
             m_targets.setDestination(x, y, z);
         }
         default:
-            //sLog.outError("SPELL: Unknown implicit target (%u) for spell ID %u", targetMode, m_spellInfo->Id);
+            //sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "SPELL: Unknown implicit target (%u) for spell ID %u", targetMode, m_spellInfo->Id);
             break;
     }
 
@@ -3627,8 +3637,8 @@ SpellCastResult Spell::prepare(Aura* triggeredByAura, uint32 chance)
     }
     catch (std::runtime_error &e)
     {
-        sLog.outInfo("[Spell/Crash] 'prepare()' [%u:%s:%u:{%f:%f:%f}]", m_spellInfo->Id, m_caster->GetName(), m_caster->GetGUIDLow(), m_castPosition.x, m_castPosition.y, m_castPosition.z);
-        sLog.outInfo(e.what());
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[Spell/Crash] 'prepare()' [%u:%s:%u:{%f:%f:%f}]", m_spellInfo->Id, m_caster->GetName(), m_caster->GetGUIDLow(), m_castPosition.x, m_castPosition.y, m_castPosition.z);
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, e.what());
         finish(false);
         return SPELL_FAILED_UNKNOWN;
     }
@@ -3730,9 +3740,9 @@ void Spell::cast(bool skipCheck)
     if (!m_caster->CheckAndIncreaseCastCounter())
     {
         if (m_triggeredByAuraSpell)
-            sLog.outError("Spell %u triggered by aura spell %u too deep in cast chain for cast. Cast not allowed for prevent overflow stack crash.", m_spellInfo->Id, m_triggeredByAuraSpell->Id);
+            sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell %u triggered by aura spell %u too deep in cast chain for cast. Cast not allowed for prevent overflow stack crash.", m_spellInfo->Id, m_triggeredByAuraSpell->Id);
         else
-            sLog.outError("Spell %u too deep in cast chain for cast. Cast not allowed for prevent overflow stack crash.", m_spellInfo->Id);
+            sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell %u too deep in cast chain for cast. Cast not allowed for prevent overflow stack crash.", m_spellInfo->Id);
 
         SendInterrupted(2);
         SendCastResult(SPELL_FAILED_ERROR);
@@ -3990,8 +4000,8 @@ void Spell::cast(bool skipCheck)
         }
         catch (std::runtime_error &e)
         {
-            sLog.outInfo("[Spell/Crash] 'handle_immediate()' [%u:%s:%u:%u]", m_spellInfo->Id, m_caster->GetName(), m_caster->GetGUIDLow(), m_caster->GetMapId());
-            sLog.outInfo(e.what());
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[Spell/Crash] 'handle_immediate()' [%u:%s:%u:%u]", m_spellInfo->Id, m_caster->GetName(), m_caster->GetGUIDLow(), m_caster->GetMapId());
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, e.what());
             SetExecutedCurrently(false);
             return;
         }
@@ -4360,7 +4370,7 @@ void Spell::update(uint32 difftime)
                     if (holder->IsDeleted())
                     {
                         Unit* target = m_targets.getUnitTarget();
-                        sLog.outError("[Spell] - Channeled update still maintains ref to deleted holder, caster: %s. Target: %s",
+                        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "[Spell] - Channeled update still maintains ref to deleted holder, caster: %s. Target: %s",
                             m_caster->GetGuidStr().c_str(), 
                             target ? target->GetGuidStr().c_str() : "");
 
@@ -4769,7 +4779,7 @@ void Spell::WriteAmmoToPacket(WorldPacket* data)
                 uint32 ammoID = ((Player*)m_caster)->GetUInt32Value(PLAYER_AMMO_ID);
                 if (ammoID)
                 {
-                    ItemPrototype const* pProto = ObjectMgr::GetItemPrototype(ammoID);
+                    ItemPrototype const* pProto = sObjectMgr.GetItemPrototype(ammoID);
                     if (pProto)
                     {
                         ammoDisplayID = pProto->DisplayInfoID;
@@ -5189,7 +5199,7 @@ void Spell::TakeCastItem()
     {
         // This code is to avoid a crash
         // I'm not sure, if this is really an error, but I guess every item needs a prototype
-        sLog.outError("Cast item (%s) has no item prototype", m_CastItem->GetGuidStr().c_str());
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Cast item (%s) has no item prototype", m_CastItem->GetGuidStr().c_str());
         return;
     }
 
@@ -5252,7 +5262,7 @@ void Spell::TakePower()
 
     if (m_spellInfo->powerType >= MAX_POWERS)
     {
-        sLog.outError("Spell::TakePower: Unknown power type '%d'", m_spellInfo->powerType);
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::TakePower: Unknown power type '%d'", m_spellInfo->powerType);
         return;
     }
 
@@ -5438,7 +5448,7 @@ void Spell::HandleEffects(Unit* pUnitTarget, Item *pItemTarget, GameObject* pGOT
     if (eff < TOTAL_SPELL_EFFECTS)
         (*this.*SpellEffects[eff])(i);
     else
-        sLog.outError("WORLD: Spell %u has effect %d at index %u > TOTAL_SPELL_EFFECTS",
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "WORLD: Spell %u has effect %d at index %u > TOTAL_SPELL_EFFECTS",
             m_spellInfo->Id, eff, i);
 }
 
@@ -5448,7 +5458,7 @@ void Spell::AddTriggeredSpell(uint32 spellId)
 
     if (!spellInfo)
     {
-        sLog.outError("Spell::AddTriggeredSpell: unknown spell id %u used as triggred spell for spell %u)", spellId, m_spellInfo->Id);
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::AddTriggeredSpell: unknown spell id %u used as triggred spell for spell %u)", spellId, m_spellInfo->Id);
         return;
     }
 
@@ -5461,7 +5471,7 @@ void Spell::AddPrecastSpell(uint32 spellId)
 
     if (!spellInfo)
     {
-        sLog.outError("Spell::AddPrecastSpell: unknown spell id %u used as pre-cast spell for spell %u)", spellId, m_spellInfo->Id);
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::AddPrecastSpell: unknown spell id %u used as pre-cast spell for spell %u)", spellId, m_spellInfo->Id);
         return;
     }
 
@@ -5798,7 +5808,13 @@ SpellCastResult Spell::CheckCast(bool strict)
         {
             if (j == TARGET_UNIT_CASTER_PET)
             {
-                Pet* pet = m_casterUnit ? m_casterUnit->GetPet() : nullptr;
+                Unit* pet = nullptr;
+                if (m_casterUnit)
+                {
+                    pet = m_casterUnit->GetPet();
+                    if (!pet)
+                        pet = ToCreature(m_casterUnit->GetCharm());
+                }
                 if (!pet)
                 {
                     if (m_triggeredByAuraSpell)              // not report pet not existence for triggered spells
@@ -5983,13 +5999,13 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (bounds.first == bounds.second)
                 {
                     if (m_spellInfo->EffectImplicitTargetA[j] == TARGET_UNIT_SCRIPT_NEAR_CASTER || m_spellInfo->EffectImplicitTargetB[j] == TARGET_UNIT_SCRIPT_NEAR_CASTER)
-                        sLog.outErrorDb("Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_UNIT_SCRIPT_NEAR_CASTER, but creature are not defined in `spell_script_target`", m_spellInfo->Id, j);
+                        sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_UNIT_SCRIPT_NEAR_CASTER, but creature are not defined in `spell_script_target`", m_spellInfo->Id, j);
 
                     if (m_spellInfo->EffectImplicitTargetA[j] == TARGET_LOCATION_SCRIPT_NEAR_CASTER || m_spellInfo->EffectImplicitTargetB[j] == TARGET_LOCATION_SCRIPT_NEAR_CASTER)
-                        sLog.outErrorDb("Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_LOCATION_SCRIPT_NEAR_CASTER, but gameobject or creature are not defined in `spell_script_target`", m_spellInfo->Id, j);
+                        sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_LOCATION_SCRIPT_NEAR_CASTER, but gameobject or creature are not defined in `spell_script_target`", m_spellInfo->Id, j);
 
                     if (m_spellInfo->EffectImplicitTargetA[j] == TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER)
-                        sLog.outErrorDb("Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER, but gameobject are not defined in `spell_script_target`", m_spellInfo->Id, j);
+                        sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Spell entry %u, effect %i has EffectImplicitTargetA/EffectImplicitTargetB = TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER, but gameobject are not defined in `spell_script_target`", m_spellInfo->Id, j);
                 }
 
                 SpellRangeEntry const* srange = sSpellRangeStore.LookupEntry(m_spellInfo->rangeIndex);
@@ -6411,7 +6427,8 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (!m_casterUnit)
                     return SPELL_FAILED_DONT_REPORT;
 
-                if (m_casterUnit->HasUnitState(UNIT_STAT_ROOT | UNIT_STAT_PENDING_ROOT))
+                if (m_casterUnit->HasUnitState(UNIT_STAT_ROOT | UNIT_STAT_PENDING_ROOT) ||
+                    m_casterUnit->IsPlayer() && static_cast<Player*>(m_casterUnit)->IsBeingTeleported())
                     return SPELL_FAILED_ROOTED;
 
                 // No path available?
@@ -7427,7 +7444,7 @@ uint32 Spell::CalculatePowerCost(SpellEntry const* spellInfo, Unit* caster, Spel
         // Else drain all power
         if (spellInfo->powerType < MAX_POWERS)
             return caster->GetPower(Powers(spellInfo->powerType));
-        sLog.outError("Spell::CalculateManaCost: Unknown power type '%d' in spell %d", spellInfo->powerType, spellInfo->Id);
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::CalculateManaCost: Unknown power type '%d' in spell %d", spellInfo->powerType, spellInfo->Id);
         return 0;
     }
 
@@ -7452,7 +7469,7 @@ uint32 Spell::CalculatePowerCost(SpellEntry const* spellInfo, Unit* caster, Spel
                 powerCost += spellInfo->ManaCostPercentage * caster->GetMaxPower(Powers(spellInfo->powerType)) / 100;
                 break;
             default:
-                sLog.outError("Spell::CalculateManaCost: Unknown power type '%d' in spell %d", spellInfo->powerType, spellInfo->Id);
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::CalculateManaCost: Unknown power type '%d' in spell %d", spellInfo->powerType, spellInfo->Id);
                 return 0;
         }
     }
@@ -7498,7 +7515,7 @@ SpellCastResult Spell::CheckPower() const
     // Check valid power type
     if (m_spellInfo->powerType >= MAX_POWERS)
     {
-        sLog.outError("Spell::CheckMana: Unknown power type '%d'", m_spellInfo->powerType);
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Spell::CheckMana: Unknown power type '%d'", m_spellInfo->powerType);
         return SPELL_FAILED_DONT_REPORT;
     }
 
@@ -7908,7 +7925,7 @@ SpellCastResult Spell::CheckItems()
                         if (!ammo)
                             return SPELL_FAILED_NO_AMMO;
 
-                        ItemPrototype const* ammoProto = ObjectMgr::GetItemPrototype(ammo);
+                        ItemPrototype const* ammoProto = sObjectMgr.GetItemPrototype(ammo);
                         if (!ammoProto)
                             return SPELL_FAILED_NO_AMMO;
 
@@ -8300,8 +8317,8 @@ bool SpellEvent::Execute(uint64 e_time, uint32 p_time)
                         }
                         catch (std::runtime_error &e)
                         {
-                            sLog.outInfo("[Spell/Crash] 'handle_immediate()' [%u:%s]", m_Spell->m_spellInfo->Id, m_Spell->GetCaster()->GetName());
-                            sLog.outInfo(e.what());
+                            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[Spell/Crash] 'handle_immediate()' [%u:%s]", m_Spell->m_spellInfo->Id, m_Spell->GetCaster()->GetName());
+                            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, e.what());
                             m_Spell->SetExecutedCurrently(false);
                             return false;
                         }
@@ -8326,8 +8343,8 @@ bool SpellEvent::Execute(uint64 e_time, uint32 p_time)
                     }
                     catch (std::runtime_error &e)
                     {
-                        sLog.outInfo("[Spell/Crash] 'handle_immediate()' [%u:%s]", m_Spell->m_spellInfo->Id, m_Spell->GetCaster()->GetName());
-                        sLog.outInfo(e.what());
+                        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[Spell/Crash] 'handle_immediate()' [%u:%s]", m_Spell->m_spellInfo->Id, m_Spell->GetCaster()->GetName());
+                        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, e.what());
                         return false;
                     }
                 }
@@ -8482,7 +8499,7 @@ public:
                 }
                 break;
             default:
-                sLog.outError("SpellNotifierCreatureAndPlayer: unsupported PUSH_* case %u.", i_push_type);
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "SpellNotifierCreatureAndPlayer: unsupported PUSH_* case %u.", i_push_type);
         }
     }
 
@@ -8774,6 +8791,17 @@ bool Spell::HasModifierApplied(SpellModifier* mod)
     return false;
 }
 
+bool Spell::IsTriggeredByProc() const
+{
+    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX3_NOT_A_PROC))
+        return false;
+
+    if (m_triggeredByAuraSpell)
+        return m_triggeredByAuraSpell->procFlags != 0;
+
+    return false;
+}
+
 bool Spell::ShouldRemoveStealthAuras()
 {
     if (!m_casterUnit)
@@ -8811,7 +8839,7 @@ void Spell::Delete() const
     if (IsDeletable())
         delete this;
     else
-        sLog.outInfo("[CRASH] Deleting in-use spell. SpellID=%u", m_spellInfo->Id);
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[CRASH] Deleting in-use spell. SpellID=%u", m_spellInfo->Id);
 }
 
 bool ChannelResetEvent::Execute(uint64 e_time, uint32)
