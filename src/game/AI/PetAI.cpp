@@ -135,29 +135,17 @@ void PetAI::UpdateAI(uint32 const diff)
         if (m_bMeleeAttack)
         {
             // Check before attacking to prevent pets from leaving stay position
-            bool attacked = false;
             if (m_creature->GetCharmInfo()->HasCommandState(COMMAND_STAY))
             {
                 if (m_creature->GetCharmInfo()->IsCommandAttack() || (m_creature->GetCharmInfo()->IsAtStay() && m_creature->CanReachWithMeleeAutoAttack(m_creature->GetVictim())))
                 {
                     if (!m_creature->HasInArc(m_creature->GetVictim()))
                         m_creature->SetInFront(m_creature->GetVictim());
-                    attacked = DoMeleeAttackIfReady();
+                    DoMeleeAttackIfReady();
                 }
             }
             else
-                attacked = DoMeleeAttackIfReady();
-
-            if (attacked && owner && owner->IsAlive())
-            {
-                if (Unit* pVictim = m_creature->GetVictim()) // Victim may have died between
-                {
-                    if (owner->HasUnitState(UNIT_STAT_FEIGN_DEATH))
-                        owner->SetInCombatWithVictim(pVictim, false, 6000);
-                    else
-                        owner->SetInCombatWith(pVictim);
-                }
-            }
+                DoMeleeAttackIfReady();
         }
     }
     else if (!playerControlled)
@@ -198,6 +186,10 @@ void PetAI::UpdateAI(uint32 const diff)
     if (playerControlled)
         return;
 
+    // Creature could have died upon attacking (thorns aura for example), and lost charm aura. Abort.
+    if (!m_creature->IsAlive() || !m_creature->GetCharmInfo() || m_creature->HasUnitState(UNIT_STAT_CAN_NOT_REACT))
+        return;
+
     // Autocast (casted only in combat or persistent spells in any state)
     if (!m_creature->IsNonMeleeSpellCasted(false))
     {
@@ -212,6 +204,9 @@ void PetAI::UpdateAI(uint32 const diff)
 
             SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellId);
             if (!spellInfo)
+                continue;
+
+            if (!spellInfo->IsAutocastable())
                 continue;
 
             if (m_creature->HasGCD(spellInfo))
@@ -652,22 +647,12 @@ void PetAI::DoAttack(Unit* target, bool chase)
             m_creature->GetMotionMaster()->MoveIdle();
         }
 
-        Unit* pOwner = m_creature->GetCharmerOrOwner();
-        if (pOwner)
+        if (m_creature->GetCharmerOrOwnerGuid().IsCreature())
         {
-            if (pOwner->IsPlayer())
-            {
-                // Flag owner for PvP if owner is player and target is flagged
-                if (!pOwner->IsPvP())
-                    pOwner->TogglePlayerPvPFlagOnAttackVictim(target);
-            }
-            else
-            {
-                // Creature pet should instantly enter combat with target
-                m_creature->AddThreat(target);
-                m_creature->SetInCombatWith(target);
-                target->SetInCombatWith(m_creature);
-            }
+            // Creature pet should instantly enter combat with target
+            m_creature->AddThreat(target);
+            m_creature->SetInCombatWith(target);
+            target->SetInCombatWith(m_creature);
         }
     }
 }
@@ -729,10 +714,6 @@ bool PetAI::CanAttack(Unit* target)
 
     // Pet desactive (monture)
     if (m_creature->IsPet() && !((Pet*)m_creature)->IsEnabled())
-        return false;
-
-    // This can happen somehow, even though pet should always have charminfo.
-    if (!m_creature->GetCharmInfo())
         return false;
 
     // Passive - passive pets can attack if told to
