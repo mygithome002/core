@@ -98,9 +98,18 @@ bool WorldSession::IsLanguageAllowedForChatType(uint32 lang, uint32 msgType)
 #endif
                 case CHAT_MSG_CHANNEL:
                     return true;
-                default:
-                    return false;
             }
+            return false;
+        }
+        case LANG_UNIVERSAL:
+        {
+            switch (msgType)
+            {
+                case CHAT_MSG_AFK:
+                case CHAT_MSG_DND:
+                    return true;
+            }
+            return false;
         }
         default:
             return true;
@@ -154,19 +163,6 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
         return;
     }
 
-    // prevent talking at unknown language (cheating)
-    LanguageDesc const* langDesc = GetLanguageDescByID(lang);
-    if (!langDesc)
-    {
-        SendNotification(LANG_UNKNOWN_LANGUAGE);
-        return;
-    }
-    if (_player && langDesc->skill_id != 0 && !_player->HasSkill(langDesc->skill_id))
-    {
-        SendNotification(LANG_NOT_LEARNED_LANGUAGE);
-        return;
-    }
-
     if (lang == LANG_ADDON)
     {
         // Disabled addon channel?
@@ -176,6 +172,13 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
     // LANG_ADDON should not be changed nor be affected by flood control
     else
     {
+        // prevent talking in unknown language (cheating)
+        if (lang != LANG_UNIVERSAL && _player && !_player->KnowsLanguage(lang))
+        {
+            SendNotification(LANG_NOT_LEARNED_LANGUAGE);
+            return;
+        }
+
         // send in universal language if player in .gmon mode (ignore spell effects)
         if (_player && _player->IsGameMaster())
             lang = LANG_UNIVERSAL;

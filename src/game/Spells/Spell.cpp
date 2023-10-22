@@ -47,7 +47,7 @@
 
 using namespace Spells;
 
-#define SPELL_CHANNEL_UPDATE_INTERVAL (1 * IN_MILLISECONDS)
+#define SPELL_CHANNEL_VISUAL_TIMER 800
 
 extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];
 
@@ -393,14 +393,13 @@ void Spell::FillTargetMap()
 
         // TODO: find a way so this is not needed?
         // for area auras always add caster as target (needed for totems for example)
-        if (m_casterUnit && IsAreaAuraEffect(m_spellInfo->Effect[i]))
-            AddUnitTarget(m_casterUnit, SpellEffectIndex(i));
-
-#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_11_2
-        // Pre 1.12 most of the quest complete spells don't have correct target set.
-        if (m_casterUnit && m_spellInfo->Effect[i] == SPELL_EFFECT_QUEST_COMPLETE)
-            AddUnitTarget(m_casterUnit, SpellEffectIndex(i));
-#endif
+        if (m_casterUnit)
+        {
+            if (IsAreaAuraEffect(m_spellInfo->Effect[i]) ||
+                m_spellInfo->Effect[i] == SPELL_EFFECT_LANGUAGE ||
+                m_spellInfo->Effect[i] == SPELL_EFFECT_QUEST_COMPLETE)
+                AddUnitTarget(m_casterUnit, SpellEffectIndex(i));
+        }
 
         // If same target already filled, use it
         // Example: AoE fear has effects speedup and modfear, with maxtargets = 1
@@ -1406,6 +1405,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
         // Fill base damage struct (unitTarget - is real spell target)
         SpellNonMeleeDamage damageInfo(pCaster, unitTarget, m_spellInfo->Id, GetFirstSchoolInMask(m_spellSchoolMask));
         damageInfo.spell = this;
+        damageInfo.reflected = isReflected;
 
         // World of Warcraft Client Patch 1.11.0 (2006-06-20)
         // - Fear: The calculations to determine if Fear effects should break due 
@@ -1770,6 +1770,7 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
                     }
                 }
                 else if (unit->IsPvP() && unit->IsCharmerOrOwnerPlayerOrPlayerItself() &&
+                         unit->GetCharmerOrOwnerOrOwnGuid() != pRealUnitCaster->GetObjectGuid() &&
                          IsFriendlyTarget(m_spellInfo->EffectImplicitTargetA[GetFirstEffectIndexInMask(effectMask)]))
                 {
                     if (Player* pPlayer = pRealUnitCaster->GetCharmerOrOwnerPlayerOrPlayerItself())
@@ -1795,7 +1796,9 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
             unit->IncrDiminishing(m_diminishGroup);
 
         m_spellAuraHolder = CreateSpellAuraHolder(m_spellInfo, unit, pRealUnitCaster ? pRealUnitCaster : unit, m_caster, m_CastItem);
+        m_spellAuraHolder->SetAddedBySpell(true);
         m_spellAuraHolder->SetTriggered(IsTriggered());
+        m_spellAuraHolder->SetReflected(isReflected);
         m_spellAuraHolder->setDiminishGroup(m_diminishGroup);
         m_spellAuraHolder->setDiminishLevel(m_diminishLevel);
     }
@@ -3376,7 +3379,7 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
                     z = waterLevel;
                 }
 
-                if (!MapManager::IsValidMapCoord(unitTarget->GetMapId(), x, y, z))
+                if (!MapManager::IsValidMapCoord(pUnitTarget->GetMapId(), x, y, z))
                     break;
 
                 pUnitTarget->GetMap()->GetLosHitPosition(srcX, srcY, srcZ, x, y, z, -0.5f);
@@ -4017,6 +4020,7 @@ void Spell::handle_immediate()
         SendChannelStart(m_duration);
         if (m_caster->IsPlayer())
             m_caster->ToPlayer()->RemoveSpellMods(this);
+        InitializeChanneledVisualTimer();
     }
 
     m_targetNum = 0;
@@ -4431,6 +4435,18 @@ void Spell::update(uint32 difftime)
                 }
 
                 finish();
+            }
+            // Periodically send the spell visual kit for some channeled spells
+            // This fixes Tranquility and Starshards visuals
+            else if (m_channeledVisualKit && m_casterUnit)
+            {
+                if (difftime >= m_channeledVisualTimer)
+                {
+                    m_casterUnit->SendPlaySpellVisual(m_channeledVisualKit);
+                    m_channeledVisualTimer = SPELL_CHANNEL_VISUAL_TIMER;
+                }
+                else
+                    m_channeledVisualTimer -= difftime;
             }
         }
         break;
@@ -4993,11 +5009,11 @@ void Spell::SendLogExecute()
 
 void Spell::SendInterrupted(uint8 result)
 {
-    // Nostalrius : fix animation de cast a l'interruption d'un sort
-    // Ce premier paquet ne sert apparement a rien ...
-    // Ce second paquet informe les joueurs aux alentours que le sort a ete interrompu.
+    // Nostalrius: fix cast animation when a spell is interrupted
+    // This first packet is apparently useless...
+    // This second packet informs surrounding players that the spell has been interrupted.
     WorldPacket data(SMSG_SPELL_FAILED_OTHER, (8 + 4));
-    data << m_caster->GetObjectGuid(); // Pareil que pour SMSG_SPELL_FAILURE
+    data << m_caster->GetObjectGuid(); // Same as for SMSG_SPELL_FAILURE
     data << m_spellInfo->Id;
     m_caster->SendObjectMessageToSet(&data, true);
 }
@@ -5154,6 +5170,22 @@ void Spell::SendChannelStart(uint32 duration)
             m_casterUnit->SetChannelObjectGuid(target->GetObjectGuid());
         m_casterUnit->SetUInt32Value(UNIT_CHANNEL_SPELL, m_spellInfo->Id);
     }
+}
+
+void Spell::InitializeChanneledVisualTimer()
+{
+    if (!(m_spellInfo->Custom & SPELL_CUSTOM_SEND_CHANNEL_VISUAL))
+        return;
+
+    if (!m_spellInfo->SpellVisual)
+        return;
+
+    SpellVisualEntry const* pSpellVisual = sSpellVisualStore.LookupEntry(m_spellInfo->SpellVisual);
+    if (!pSpellVisual || !pSpellVisual->channelKit)
+        return;
+
+    m_channeledVisualKit = pSpellVisual->channelKit;
+    m_channeledVisualTimer = SPELL_CHANNEL_VISUAL_TIMER;
 }
 
 void Spell::SendResurrectRequest(Player* target, bool sickness)
@@ -5526,6 +5558,10 @@ void Spell::RemoveChanneledAuraHolder(SpellAuraHolder* holder, AuraRemoveMode mo
 
 SpellCastResult Spell::CheckCast(bool strict)
 {
+    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX_IGNORE_CASTER_AND_TARGET_RESTRICTIONS) ||
+        m_spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_AND_TARGET_RESTRICTIONS))
+        return SPELL_CAST_OK;
+
     if (m_caster->IsPlayer() && m_caster->ToPlayer()->HasCheatOption(PLAYER_CHEAT_NO_CHECK_CAST))
         return SPELL_CAST_OK;
 
@@ -5583,15 +5619,15 @@ SpellCastResult Spell::CheckCast(bool strict)
     }
 
     if (m_caster->IsPlayer() && !((Player*)m_caster)->IsGameMaster() &&
-            sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK) &&
-            VMAP::VMapFactory::createOrGetVMapManager()->isLineOfSightCalcEnabled())
+        sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK) &&
+        VMAP::VMapFactory::createOrGetVMapManager()->isLineOfSightCalcEnabled())
     {
         if (m_spellInfo->Attributes & SPELL_ATTR_ONLY_OUTDOORS &&
-                !m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
+           !m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
             return SPELL_FAILED_ONLY_OUTDOORS;
 
         if (m_spellInfo->Attributes & SPELL_ATTR_ONLY_INDOORS &&
-                m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
+            m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
             return SPELL_FAILED_ONLY_INDOORS;
     }
 
@@ -6442,11 +6478,11 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (strict)
                 {
                     SpellRangeEntry const* spellRange = sSpellRangeStore.LookupEntry(m_spellInfo->rangeIndex);
-                    Unit* unitTarget = m_targets.getUnitTarget();
-                    if (unitTarget && spellRange && spellRange->maxRange > 0.0f)
+                    Unit* pUnitTarget = m_targets.getUnitTarget();
+                    if (pUnitTarget && spellRange && spellRange->maxRange > 0.0f)
                     {
                         float x, y, z;
-                        unitTarget->GetPosition(x, y, z);
+                        pUnitTarget->GetPosition(x, y, z);
 
                         if (!m_casterUnit->IsInWater())
                         {
@@ -7185,13 +7221,6 @@ SpellCastResult Spell::CheckPetCast(Unit* target)
 SpellCastResult Spell::CheckCasterAuras() const
 {
     if (!m_casterUnit)
-        return SPELL_CAST_OK;
-
-    // Flag drop spells totally immuned to caster auras
-    // FIXME: find more nice check for all totally immuned spells
-    // AttributesEx3 & 0x10000000?
-    if (m_spellInfo->Id == 23336 ||                         // Alliance Flag Drop
-            m_spellInfo->Id == 23334)                           // Horde Flag Drop
         return SPELL_CAST_OK;
 
     uint8 school_immune = 0;
@@ -8603,10 +8632,8 @@ public:
                             continue;
 
                         // Negative AoE from non flagged players cannot target other players
-                        if (Player* attackedPlayer = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
-                            if (Player* casterPlayer = casterUnit->GetCharmerOrOwnerPlayerOrPlayerItself())
-                                if (!casterPlayer->IsPvP() && !(casterPlayer->IsFFAPvP() && attackedPlayer->IsFFAPvP()) && !casterPlayer->IsInDuelWith(attackedPlayer))
-                                    continue;
+                        if (!casterUnit->CanAttackWithoutEnablingPvP(unit))
+                            continue;
                     }
                     else if (GameObject* gobj = i_originalCaster->ToGameObject())
                     {
