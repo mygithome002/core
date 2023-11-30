@@ -848,7 +848,11 @@ SpellCastResult Spell::CheckScriptTargeting(SpellEffectIndex effIndex, uint32 ch
         /* For TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER makes DB targets optional not required for now
         * TODO: Makes more research for this target type
         */
-        if (targetMode != TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER)
+        if (targetMode != TARGET_GAMEOBJECT_SCRIPT_NEAR_CASTER ||
+            m_spellInfo->Id == 15958 || // Collect Rookery Egg
+            m_spellInfo->Id == 16447 || // Spawn Challenge to Urok
+            m_spellInfo->Id == 24973 // Clean Up Stink Bomb
+            )
         {
             // not report target not existence for triggered spells
             if (m_triggeredByAuraSpell || m_IsTriggeredSpell)
@@ -1155,7 +1159,7 @@ void Spell::AddUnitTarget(Unit* pTarget, SpellEffectIndex effIndex)
 #endif
         {
             if (m_casterUnit && !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS))
-                m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(pTarget, PROC_FLAG_NONE, PROC_FLAG_TAKE_HARMFUL_SPELL, PROC_EX_REFLECT, 1, BASE_ATTACK, m_spellInfo, this));
+                m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(pTarget, PROC_FLAG_NONE, PROC_FLAG_TAKE_HARMFUL_SPELL, PROC_EX_REFLECT, 1, 1, BASE_ATTACK, m_spellInfo, this));
             targetInfo.reflectResult = SPELL_MISS_IMMUNE;
         }
         else
@@ -1541,6 +1545,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
                 m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
                 procEx,
                 addhealth,
+                addhealth,
                 m_attackType,
                 spellInfo,
                 this));
@@ -1586,6 +1591,8 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
             pCaster->CalculateSpellDamage(&damageInfo, m_damage, m_spellInfo, damageEffectIndex, m_attackType, this, target->isCrit);
         }
 
+        uint32 const originalDamage = damageInfo.damage;
+
         unitTarget->CalculateAbsorbResistBlock(pCaster, &damageInfo, m_spellInfo, BASE_ATTACK, this);
         m_absorbed = damageInfo.absorb;
 
@@ -1612,6 +1619,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
                 m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
                 procEx,
                 damageInfo.damage,
+                originalDamage,
                 m_attackType,
                 m_spellInfo,
                 this));
@@ -1724,6 +1732,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
            !m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_CASTER_PROCS) ? procAttacker : PROC_FLAG_NONE,
             m_spellInfo->HasAttribute(SPELL_ATTR_EX3_SUPPRESS_TARGET_PROCS) ? PROC_FLAG_NONE : procVictim,
             procEx,
+            dmg,
             dmg,
             m_attackType,
             m_spellInfo,
@@ -3758,9 +3767,6 @@ SpellCastResult Spell::prepare(Aura* triggeredByAura, uint32 chance)
             // add gcd server side (client side is handled by client itself)
             if (!m_caster->IsPlayer() || !static_cast<Player*>(m_caster)->HasCheatOption(PLAYER_CHEAT_NO_COOLDOWN))
                 m_caster->AddGCD(*m_spellInfo);
-            // Cast on self -> execute NOW
-            //if (!m_timer && m_caster->IsPlayer() && !m_targets.m_targetMask && !IsAreaOfEffectSpell(m_spellInfo))
-            //    cast(true);
         }
         // execute triggered without cast time explicitly in call point
         else if ((m_timer == 0) &&
@@ -4084,11 +4090,11 @@ void Spell::cast(bool skipCheck)
         }
 
         // This will trigger only auras with PROC_EX_CAST_END.
-        m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(pTarget, m_procAttacker, PROC_FLAG_NONE, procEx, 1, m_attackType, m_spellInfo, this));
+        m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(pTarget, m_procAttacker, PROC_FLAG_NONE, procEx, 1, 1, m_attackType, m_spellInfo, this));
 
         // Trigger procs for spells with no unit targets at cast time.
         if (m_UniqueTargetInfo.empty())
-            m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(nullptr, m_procAttacker, PROC_FLAG_NONE, PROC_EX_NORMAL_HIT, 1, m_attackType, m_spellInfo, this));
+            m_casterUnit->ProcDamageAndSpell(ProcSystemArguments(nullptr, m_procAttacker, PROC_FLAG_NONE, PROC_EX_NORMAL_HIT, 1, 1, m_attackType, m_spellInfo, this));
     }
 
     // Okay, everything is prepared. Now we need to distinguish between immediate and evented delayed spells
@@ -5801,11 +5807,6 @@ SpellCastResult Spell::CheckCast(bool strict)
                 return SPELL_FAILED_MOVING;
         }
 
-        if (!m_IsTriggeredSpell && m_spellInfo->NeedsComboPoints() && Spells::IsExplicitlySelectedUnitTarget(m_spellInfo->EffectImplicitTargetA[0]) &&
-           (!m_targets.getUnitTarget() || m_targets.getUnitTarget()->GetObjectGuid() != ((Player*)m_caster)->GetComboTargetGuid()))
-            // warrior not have real combo-points at client side but use this way for mark allow Overpower use
-            return m_casterUnit->GetClass() == CLASS_WARRIOR ? SPELL_FAILED_BAD_TARGETS : SPELL_FAILED_NO_COMBO_POINTS;
-
         switch (m_spellInfo->Id)
         {
             // Mongoose Bite
@@ -6581,36 +6582,6 @@ SpellCastResult Spell::CheckCast(bool strict)
                     // chance for failure in orange gather / lockpick (gathering skill can't fail at maxskill)
                     if ((canFailAtMax || skillValue < sWorld.GetConfigMaxSkillValue()) && reqSkillValue > irand(skillValue - 25, skillValue + 37))
                         return SPELL_FAILED_TRY_AGAIN;
-                }
-                break;
-            }
-            case SPELL_EFFECT_ACTIVATE_OBJECT:
-            {
-                if (m_spellInfo->Id == 15958) // Collect Rookery Egg
-                { 
-                    if (!m_UniqueGOTargetInfo.empty())
-                    {
-                        ObjectGuid eggGuid = m_UniqueGOTargetInfo.back().targetGUID;
-                        if (GameObject* pRookeryEgg = m_caster->GetMap()->GetGameObject(eggGuid))
-                        {
-                            if (pRookeryEgg->GetGoState() != GO_STATE_ACTIVE_ALTERNATIVE)
-                                return SPELL_FAILED_BAD_TARGETS;
-                        }
-                        else
-                            return SPELL_FAILED_BAD_IMPLICIT_TARGETS;
-                    }
-                    else
-                        return SPELL_FAILED_BAD_IMPLICIT_TARGETS;
-                }
-                else if (m_spellInfo->Id == 16447) // Spawn Challenge to Urok
-                {
-                    if (m_UniqueGOTargetInfo.empty())
-                        return SPELL_FAILED_BAD_IMPLICIT_TARGETS;
-                }
-                else if (m_spellInfo->Id == 24973) // Clean Up Stink Bomb
-                {
-                    if (m_UniqueGOTargetInfo.empty())
-                        return SPELL_FAILED_BAD_IMPLICIT_TARGETS;
                 }
                 break;
             }
@@ -7471,6 +7442,11 @@ SpellCastResult Spell::CheckPower() const
     // item cast not used power
     if (m_CastItem || m_IsTriggeredSpell || !m_casterUnit)
         return SPELL_CAST_OK;
+
+    if (m_casterUnit->IsPlayer() && m_spellInfo->NeedsComboPoints() && Spells::IsExplicitlySelectedUnitTarget(m_spellInfo->EffectImplicitTargetA[0]) &&
+       (!m_targets.getUnitTarget() || m_targets.getUnitTarget()->GetObjectGuid() != ((Player*)m_casterUnit)->GetComboTargetGuid()))
+        // warrior not have real combo-points at client side but use this way for mark allow Overpower use
+        return m_casterUnit->GetClass() == CLASS_WARRIOR ? SPELL_FAILED_BAD_TARGETS : SPELL_FAILED_NO_COMBO_POINTS;
 
     // health as power used - need check health amount
     if (m_spellInfo->powerType == POWER_HEALTH)
