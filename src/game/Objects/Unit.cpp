@@ -626,6 +626,29 @@ uint32 Unit::DealDamage(Unit* pVictim, uint32 damage, CleanDamage const* cleanDa
             static_cast<Player*>(pVictim)->ScheduleStandUp();
     }
 
+    auto ShouldEnterCombat = [&]()
+    {
+        if (pVictim == this)
+            return false;
+
+        if (spell && spell->IsTriggeredByProc())
+            return false;
+
+        if (spellProto && spellProto->HasAura(SPELL_AURA_DAMAGE_SHIELD))
+            return false;
+
+        if (damagetype == DOT)
+        {
+            // We need to check channeled dot here, because spells like Blizzard and Starshards have No Initial Threat attribute.
+            if (spellProto && spellProto->IsChanneledSpell())
+                return true;
+
+            return false;
+        }
+
+        return true;
+    };
+
     if (!damage)
     {
         if (cleanDamage)
@@ -654,7 +677,7 @@ uint32 Unit::DealDamage(Unit* pVictim, uint32 damage, CleanDamage const* cleanDa
                 if (pVictim->IsPlayer() && damagetype != DOT)
                     pVictim->InterruptSpellsWithInterruptFlags(SPELL_INTERRUPT_FLAG_DAMAGE_CANCELS, spellProto ? spellProto->Id : 0);
             }
-            if (damagetype != DOT)
+            if (ShouldEnterCombat())
             {
                 pVictim->SetInCombatWithAggressor(this);
                 SetInCombatWithVictim(pVictim);
@@ -689,8 +712,7 @@ uint32 Unit::DealDamage(Unit* pVictim, uint32 damage, CleanDamage const* cleanDa
     }
 
     // Enter combat or extend leash timer.
-    if ((pVictim != this) && (damagetype != DOT || (spellProto && spellProto->HasEffect(SPELL_EFFECT_PERSISTENT_AREA_AURA))) &&
-       (!spellProto || !spellProto->HasAura(SPELL_AURA_DAMAGE_SHIELD)) && (!spell || !spell->IsTriggeredByProc()))
+    if (ShouldEnterCombat())
     {
         pVictim->SetInCombatWithAggressor(this);
         SetInCombatWithVictim(pVictim);
@@ -3235,6 +3257,10 @@ bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
             // Skip channeled spells (Arcane missile, ...) so two casters can channel at the same time
             if (aurSpellInfo->IsChanneledSpell())
                 continue;
+
+            if (aurSpellInfo->Custom & SPELL_CUSTOM_SEPARATE_AURA_PER_CASTER)
+                continue;
+
             bool stop = false;
 
             for (int32 i = 0; i < MAX_EFFECT_INDEX && !stop; ++i)
@@ -3242,10 +3268,6 @@ bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
                 // no need to check non stacking auras that weren't/won't be applied on this target
                 if (!foundHolder->m_auras[i] || !holder->m_auras[i])
                     continue;
-
-                // Croise
-                if (aurSpellInfo->Id == 20007)
-                    break;
 
                 // m_auraname can be modified to SPELL_AURA_NONE for area auras, use original
                 AuraType aurNameReal = AuraType(aurSpellInfo->EffectApplyAuraName[i]);
@@ -4645,8 +4667,11 @@ void Unit::AttackedBy(Unit* attacker)
             pCreature->AI()->AttackedBy(attacker);
 
         // trigger owner AI reaction
+        // must check that attacker is targetable by owner,
+        // because there are cases with unattackable creatures spawning pets
+        // example: Scarshield Portal (9707) spawns guardian pet Burning Imp (9708) with spell 15126
         if (Creature* pOwner = ::ToCreature(GetCharmerOrOwner()))
-            if (pOwner->AI())
+            if (pOwner->AI() && pOwner->IsAlive() && attacker->IsTargetableBy(pOwner))
                 pOwner->AI()->AttackedBy(attacker);
     }
 }
@@ -7299,15 +7324,25 @@ void Unit::SetDeathState(DeathState s)
 
         CombatStop();
         DeleteThreatList();
-        ClearComboPointHolders();                           // any combo points pointed to unit lost at it death
 
         if (IsNonMeleeSpellCasted(false))
             InterruptNonMeleeSpells(false);
     }
 
     m_deathState = s;
+
     if (s == JUST_DIED)
     {
+        if (!m_ComboPointHolders.empty())
+        {
+            // Delay clearing combo points until next update.
+            // This fixes Relentless Strikes not triggering when the finishing move kills the target.
+            m_Events.AddLambdaEventAtOffset([this]
+            {
+                ClearComboPointHolders();
+            }, 1);
+        }
+
         RemoveAllAurasOnDeath();
         UnsummonAllTotems();
 
@@ -7333,11 +7368,6 @@ void Unit::SetDeathState(DeathState s)
     else if (s == JUST_ALIVED || s == ALIVE)
     {
         RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SKINNABLE);  // clear skinnable for creature and player (at battleground)
-    }
-
-    if (m_deathState != ALIVE && s == ALIVE)
-    {
-        //_ApplyAllAuraMods();
     }
 }
 
@@ -9052,7 +9082,8 @@ void Unit::ModConfuseSpell(bool apply, ObjectGuid casterGuid, uint32 spellId, Mo
     else
         RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_FLEEING);
 
-    m_movementInfo.moveFlags &= ~MOVEFLAG_MASK_MOVING_OR_TURN;
+    m_movementInfo.ctime = 0;
+    m_movementInfo.RemoveMovementFlag(MOVEFLAG_MASK_MOVING_OR_TURN);
 
     if (apply)
     {
@@ -9134,6 +9165,7 @@ void Unit::SetFeignDeath(bool apply, ObjectGuid casterGuid, bool success)
 {
     if (apply)
     {
+        m_movementInfo.ctime = 0;
         m_movementInfo.RemoveMovementFlag(MOVEFLAG_MASK_MOVING_OR_TURN);
         if (!IsPlayer())
             StopMoving();
@@ -10617,6 +10649,7 @@ void Unit::DisableSpline()
     if (Player* me = ToPlayer())
         me->SetFallInformation(0, me->GetPositionZ());
     m_movementInfo.RemoveMovementFlag(MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD);
+    m_movementInfo.ctime = 0;
     movespline->_Interrupt();
 }
 

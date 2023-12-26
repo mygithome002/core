@@ -1284,16 +1284,15 @@ Map::Remove(T* obj, bool remove)
         UpdateObjectVisibility(obj, cell, p); // i think will be better to call this function while object still in grid, this changes nothing but logically is better(as for me)
     RemoveFromGrid(obj, grid, cell);
 
-    obj->ResetMap();
     if (remove)
-    {
         // if option set then object already saved at this moment
         if (!sWorld.getConfig(CONFIG_BOOL_SAVE_RESPAWN_TIME_IMMEDIATELY))
-            obj->SaveRespawnTime();
+            obj->SaveRespawnTime(); // requires map not being reset
 
-        // Note: In case resurrectable corpse and pet its removed from global lists in own destructor
+    obj->ResetMap();
+    
+    if (remove) // Note: In case resurrectable corpse and pet its removed from global lists in own destructor
         delete obj;
-    }
 }
 
 template<>
@@ -3316,6 +3315,16 @@ VMAP::ModelInstance* Map::FindCollisionModel(float x1, float y1, float z1, float
     ASSERT(MaNGOS::IsValidMapCoord(x1, y1, z1));
     ASSERT(MaNGOS::IsValidMapCoord(x2, y2, z2));
     return VMAP::VMapFactory::createOrGetVMapManager()->FindCollisionModel(GetId(), x1, y1, z1, x2, y2, z2);
+}
+
+GameObjectModel const* Map::FindDynamicObjectCollisionModel(float x1, float y1, float z1, float x2, float y2, float z2)
+{
+    ASSERT(MaNGOS::IsValidMapCoord(x1, y1, z1));
+    ASSERT(MaNGOS::IsValidMapCoord(x2, y2, z2));
+    Vector3 const pos1 = Vector3(x1, y1, z1);
+    Vector3 const pos2 = Vector3(x2, y2, z2);
+    std::shared_lock<std::shared_timed_mutex> lock(_dynamicTree_lock);
+    return _dynamicTree.getObjectHit(pos1, pos2);
 }
 
 void Map::RemoveGameObjectModel(const GameObjectModel &model)
