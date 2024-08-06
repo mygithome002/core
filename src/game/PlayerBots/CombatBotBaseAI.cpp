@@ -822,6 +822,11 @@ void CombatBotBaseAI::PopulateSpellData()
                     if (IsHigherRankSpell(m_spells.priest.pPrayerofFortitude))
                         m_spells.priest.pPrayerofFortitude = pSpellEntry;
                 }
+                else if (pSpellEntry->SpellName[0].find("Prayer of Shadow Protection") != std::string::npos)
+                {
+                    if (IsHigherRankSpell(m_spells.priest.pPrayerofShadowProtection))
+                        m_spells.priest.pPrayerofShadowProtection = pSpellEntry;
+                }
                 else if (pSpellEntry->SpellName[0].find("Inner Fire") != std::string::npos)
                 {
                     if (IsHigherRankSpell(m_spells.priest.pInnerFire))
@@ -3082,7 +3087,7 @@ void CombatBotBaseAI::SendBattlefieldPortPacket()
 
 void CombatBotBaseAI::SendBattlemasterJoinPacket(uint8 battlegroundId)
 {
-    WorldPacket data(CMSG_BATTLEMASTER_JOIN);
+    WorldPacket data(CMSG_BATTLEFIELD_JOIN);
     data << me->GetObjectGuid();                       // battlemaster guid, or player guid if joining queue from BG portal
 
     switch (battlegroundId)

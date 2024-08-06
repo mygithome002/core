@@ -67,7 +67,7 @@ enum MovementChangeType
 
 #define UNIT_PVP_COMBAT_TIMER 5500
 
-#define BASE_MELEERANGE_OFFSET 1.33f
+#define BASE_MELEERANGE_OFFSET 1.333333373069763f
 #define BASE_MINDAMAGE 1.0f
 #define BASE_MAXDAMAGE 2.0f
 #define BASE_ATTACK_TIME 2000
@@ -343,8 +343,6 @@ enum UnitMods
     UNIT_MOD_RESISTANCE_FROST,
     UNIT_MOD_RESISTANCE_SHADOW,
     UNIT_MOD_RESISTANCE_ARCANE,
-    UNIT_MOD_ATTACK_POWER,
-    UNIT_MOD_ATTACK_POWER_RANGED,
     UNIT_MOD_DAMAGE_MAINHAND,
     UNIT_MOD_DAMAGE_OFFHAND,
     UNIT_MOD_DAMAGE_RANGED,
@@ -420,7 +418,6 @@ enum UnitState
     UNIT_STAT_PENDING_ROOT          = 0x00100000,               // apply root on finishing charge
     UNIT_STAT_PENDING_STUNNED       = 0x00200000,               // apply stun on finishing charge
     UNIT_STAT_ROOT_ON_LANDING       = 0x00400000,               // used to verify modern client behavior on root while falling
-    UNIT_STAT_FLYING_ALLOWED        = 0x00800000,               // has gm fly mode enabled
 
     // High-level states
     UNIT_STAT_RUNNING            = 0x01000000,
@@ -513,8 +510,6 @@ static char const* UnitStateToString(uint32 state)
             return "Pending Stunned";
         case UNIT_STAT_ROOT_ON_LANDING:
             return "Root on Landing";
-        case UNIT_STAT_FLYING_ALLOWED:
-            return "Flying Allowed";
         case UNIT_STAT_RUNNING:
             return "Running";
         case UNIT_STAT_ALLOW_INCOMPLETE_PATH:
