@@ -51,6 +51,7 @@ class SqlResultQueue;
 class QueryResult;
 class World;
 class MovementBroadcaster;
+struct PlayerTransactionData;
 
 World& GetSWorld();
 
@@ -545,7 +546,6 @@ enum eConfigBoolValues
     CONFIG_BOOL_BATTLEGROUND_RANDOMIZE,
     CONFIG_BOOL_SEND_LOOT_ROLL_UPON_RECONNECT,
     CONFIG_BOOL_ACCURATE_PETS,
-    CONFIG_BOOL_ACCURATE_SPELL_EFFECTS,
     CONFIG_BOOL_ACCURATE_PVE_EVENTS,
     CONFIG_BOOL_ACCURATE_LFG,
     CONFIG_BOOL_NO_RESPEC_PRICE_DECAY,
@@ -633,34 +633,13 @@ enum RealmType
 
 class SessionPacketSendTask
 {
-    SessionPacketSendTask(const SessionPacketSendTask&) = delete;
 public:
+    SessionPacketSendTask(SessionPacketSendTask const&) = delete;
     SessionPacketSendTask(uint32 accountId, WorldPacket& data) : m_accountId(accountId), m_data(data) {}
     void operator ()();
 private:
     uint32 m_accountId;
     WorldPacket m_data;
-};
-
-struct TransactionPart
-{
-    static int const MAX_TRANSACTION_ITEMS = 6;
-    TransactionPart()
-    {
-        memset(this, 0, sizeof(TransactionPart));
-    }
-    uint32 lowGuid;
-    uint32 money;
-    uint32 spell;
-    uint16 itemsEntries[MAX_TRANSACTION_ITEMS];
-    uint8 itemsCount[MAX_TRANSACTION_ITEMS];
-    uint32 itemsGuid[MAX_TRANSACTION_ITEMS];
-};
-
-struct PlayerTransactionData
-{
-    char const* type;
-    TransactionPart parts[2];
 };
 
 // Storage class for commands issued for delayed execution
@@ -758,7 +737,7 @@ class World
         // Uptime (in secs)
         uint32 GetUptime() const { return uint32(m_gameTime - m_startTime); }
 
-        tm *GetLocalTimeByTime(time_t now) const { return localtime(&now); }
+        static tm *GetLocalTimeByTime(time_t now) { return localtime(&now); }
 
         uint32 GetLastMaintenanceDay() const
         {
@@ -780,7 +759,7 @@ class World
 
         void SendWorldText(int32 string_id, ...);
         void SendWorldTextToBGAndQueue(int32 string_id, uint32 queuedPlayerLevel, uint32 queueType, ...);
-        void SendBroadcastTextToWorld(uint32 textId);
+        void SendBroadcastTextToWorld(uint32 textId, ObjectGuid senderGuid = ObjectGuid());
 
         // Only for GMs with ticket notification ON
         void SendGMTicketText(int32 string_id, ...);
@@ -826,8 +805,8 @@ class World
         bool getConfig(eConfigBoolValues index) const { return m_configBoolValues[index]; }
 
         // Are we on a "Player versus Player" server?
-        bool IsPvPRealm() { return (getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_PVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_RPPVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_FFA_PVP); }
-        bool IsFFAPvPRealm() { return getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_FFA_PVP; }
+        bool IsPvPRealm() const { return (getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_PVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_RPPVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_FFA_PVP); }
+        bool IsFFAPvPRealm() const { return getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_FFA_PVP; }
 
         void KickAll();
         void KickAllLess(AccountTypes sec);
@@ -861,7 +840,7 @@ class World
         LocaleConstant GetAvailableDbcLocale(LocaleConstant locale) const { if (m_availableDbcLocaleMask & (1 << locale)) return locale; else return m_defaultDbcLocale; }
 
         // Nostalrius
-        MovementBroadcaster* GetBroadcaster() { return m_broadcaster.get(); }
+        MovementBroadcaster* GetBroadcaster() const { return m_broadcaster.get(); }
         float GetTimeRate() const { return m_timeRate; }
         void SetTimeRate(float rate) { m_timeRate = rate; }
         float m_timeRate;

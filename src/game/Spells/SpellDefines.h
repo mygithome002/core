@@ -521,6 +521,14 @@ enum SpellModOp
     MAX_SPELLMOD                    = 29,
 };
 
+// Note: SPELLMOD_* values is aura types in fact
+enum SpellModType
+{
+    SPELLMOD_TYPE_NONE    = 0,
+    SPELLMOD_FLAT         = 107,                            // SPELL_AURA_ADD_FLAT_MODIFIER
+    SPELLMOD_PCT          = 108                             // SPELL_AURA_ADD_PCT_MODIFIER
+};
+
 // Spell aura states
 enum AuraState
 {   // (C) used in caster aura state     (T) used in target aura state
@@ -895,6 +903,7 @@ enum SpellAttributesCustom
     SPELL_CUSTOM_NOT_REMOVED_ON_EVADE       = 0x400,     // Aura persists after creature evades
     SPELL_CUSTOM_SEND_CHANNEL_VISUAL        = 0x800,     // Will periodically send the channeling spell visual kit
     SPELL_CUSTOM_SEPARATE_AURA_PER_CASTER   = 0x1000,    // Each caster has his own aura slot, instead of replacing others
+    SPELL_CUSTOM_TRIGGER_WEAPON_PROCS       = 0x2000,    // Can trigger weapon enchants and on hit effects
 };
 
 // Custom flags assigned by the core based on spell template data

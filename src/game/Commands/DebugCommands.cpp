@@ -1624,7 +1624,7 @@ bool ChatHandler::HandleDebugSpellModsCommand(char* args)
     PSendSysMessage(LANG_YOU_CHANGE_SPELLMODS, opcode == SMSG_SET_FLAT_SPELL_MODIFIER ? "flat" : "pct",
                     spellmodop, value, effidx, GetNameLink(chr).c_str());
     if (needReportToTarget(chr))
-        ChatHandler(chr).PSendSysMessage(LANG_YOURS_SPELLMODS_CHANGED, GetNameLink().c_str(),
+        chr->PSendSysMessage(LANG_YOURS_SPELLMODS_CHANGED, GetNameLink().c_str(),
                                          opcode == SMSG_SET_FLAT_SPELL_MODIFIER ? "flat" : "pct", spellmodop, value, effidx);
 
     WorldPacket data(opcode, (1 + 1 + 2 + 2));
@@ -1643,6 +1643,12 @@ bool ChatHandler::HandleDebugLoSCommand(char*)
     if (!target)
     {
         SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
+        return false;
+    }
+
+    if (target->GetDistance(m_session->GetPlayer()) < 0.1f)
+    {
+        SendSysMessage("You are too close to the target.");
         return false;
     }
 
@@ -2339,13 +2345,13 @@ bool ChatHandler::HandleUnitStatCommand(char *args)
     if (!pTarget)
         return false;
     uint32 unitStat = 0x0;
-    for (int i = 1; i < UNIT_STAT_IGNORE_PATHFINDING; i *= 2)
+    for (int i = 1; i < UNIT_STATE_IGNORE_PATHFINDING; i *= 2)
         if (pTarget->HasUnitState(i))
             unitStat |= i;
     PSendSysMessage("UnitState = 0x%x (%u)", unitStat, unitStat);
     if (ExtractUInt32(&args, unitStat))
     {
-        pTarget->ClearUnitState(UNIT_STAT_ALL_STATE);
+        pTarget->ClearUnitState(UNIT_STATE_ALL_STATE);
         pTarget->AddUnitState(unitStat);
         PSendSysMessage("UnitState changed to 0x%x (%u)", unitStat, unitStat);
     }

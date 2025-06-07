@@ -63,7 +63,6 @@ public:
     float TotalChance() const;                          // Overall chance for the group
 
     void Verify(LootStore const& lootstore, uint32 id, uint32 group_id) const;
-    void CollectLootIds(LootIdSet& set) const;
     void CheckLootRefs(LootIdSet* ref_set) const;
 private:
     LootStoreItemList ExplicitlyChanced;                // Entries with chances defined in DB
@@ -440,7 +439,7 @@ bool LootStoreItem::AllowedForTeam(Loot const& loot) const
     return true;
 }
 
-LootSlotType LootItem::GetSlotTypeForSharedLoot(PermissionTypes permission, Player* viewer, WorldObject const* lootTarget, bool condition_ok /*= false*/) const
+LootSlotType LootItem::GetSlotTypeForSharedLoot(PermissionTypes permission, Player const* viewer, WorldObject const* lootTarget, bool condition_ok /*= false*/) const
 {
     // ignore looted, FFA (each player get own copy) and not allowed items
     if (is_looted || freeforall || (conditionId && !condition_ok) || !AllowedForPlayer(viewer, lootTarget))
@@ -575,7 +574,7 @@ void Loot::FillNotNormalLootFor(Player* pl)
         FillNonQuestNonFFAConditionalLoot(pl);
 }
 
-QuestItemList* Loot::FillFFALoot(Player* player)
+QuestItemList* Loot::FillFFALoot(Player const* player)
 {
     if (!player->IsInWorld())
         return nullptr;
@@ -601,7 +600,7 @@ QuestItemList* Loot::FillFFALoot(Player* player)
     return ql;
 }
 
-QuestItemList* Loot::FillQuestLoot(Player* player)
+QuestItemList* Loot::FillQuestLoot(Player const* player)
 {
     if (!player->IsInWorld())
         return nullptr;
@@ -639,7 +638,7 @@ QuestItemList* Loot::FillQuestLoot(Player* player)
     return ql;
 }
 
-QuestItemList* Loot::FillNonQuestNonFFAConditionalLoot(Player* player)
+QuestItemList* Loot::FillNonQuestNonFFAConditionalLoot(Player const* player)
 {
     if (!player->IsInWorld())
         return nullptr;
@@ -1029,7 +1028,7 @@ bool Loot::hasOverThresholdItem() const
 }
 
 // return true if there is any FFA, quest or conditional item for the player.
-bool Loot::hasItemFor(Player* player) const
+bool Loot::hasItemFor(Player const* player) const
 {
     QuestItemMap const& lootPlayerQuestItems = GetPlayerQuestItems();
     QuestItemMap::const_iterator q_itr = lootPlayerQuestItems.find(player->GetGUIDLow());
@@ -1444,9 +1443,9 @@ void LoadLootTemplates_Gameobject()
     LootTemplates_Gameobject.LoadAndCollectLootIds(ids_set);
 
     // remove real entries and check existence loot
-    for (auto itr = sGOStorage.begin<GameObjectInfo>(); itr < sGOStorage.end<GameObjectInfo>(); ++itr)
+    for (auto const& itr : sObjectMgr.GetGameObjectInfoMap())
     {
-        if (uint32 lootid = itr->GetLootId())
+        if (uint32 lootid = itr.second->GetLootId())
         {
             if (ids_set.find(lootid) == ids_set.end())
                 LootTemplates_Gameobject.ReportNotExistedId(lootid);

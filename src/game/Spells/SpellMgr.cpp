@@ -25,12 +25,10 @@
 #include "ProgressBar.h"
 #include "DBCStores.h"
 #include "World.h"
-#include "Chat.h"
 #include "Spell.h"
 #include "ScriptMgr.h"
-#include "BattleGroundMgr.h"
-#include "MapManager.h"
 #include "Unit.h"
+#include "BattleGround.h"
 
 using namespace Spells;
 
@@ -1186,6 +1184,11 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                         ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x4)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x00000004000))))
                     return false;
 
+                // Wyvern Sting DoT & Immolation Trap Effect - using family flags
+                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x10000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x4))) ||
+                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x10000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x4))))
+                    return false;
+
                 // Bestial Wrath
                 if (spellInfo_1->SpellIconID == 1680 && spellInfo_2->SpellIconID == 1680)
                     return false;
@@ -2140,7 +2143,7 @@ void SpellMgr::LoadSpellScriptTarget()
                 if (!targetEntry)
                     break;
 
-                if (!sGOStorage.LookupEntry<GameObjectInfo>(targetEntry))
+                if (!sObjectMgr.GetGameObjectTemplate(targetEntry))
                 {
                     if (!sObjectMgr.IsExistingGameObjectId(targetEntry))
                         sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `spell_script_target`: gameobject template entry %u does not exist.", targetEntry);
@@ -2148,27 +2151,26 @@ void SpellMgr::LoadSpellScriptTarget()
                 }
                 break;
             }
+            case SPELL_TARGET_TYPE_PLAYER:
+            {
+                // nothing to check
+                break;
+            }
             default:
+            {
                 if (!targetEntry)
                 {
                     sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `spell_script_target`: target entry == 0 for not GO target type (%u).", type);
                     continue;
                 }
-                if (CreatureInfo const* cInfo = sObjectMgr.GetCreatureTemplate(targetEntry))
-                {
-                    if (spellId == 30427 && !cInfo->skinning_loot_id)
-                    {
-                        sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `spell_script_target` has creature %u as a target of spellid 30427, but this creature has no skinlootid. Gas extraction will not work!", cInfo->entry);
-                        continue;
-                    }
-                }
-                else
+                if (!sObjectMgr.GetCreatureTemplate(targetEntry))
                 {
                     if (!sObjectMgr.IsExistingCreatureId(targetEntry))
                         sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `spell_script_target`: creature template entry %u does not exist.", targetEntry);
                     continue;
                 }
                 break;
+            }
         }
 
         mSpellScriptTarget.insert(SpellScriptTarget::value_type(spellId, SpellTargetEntry(SpellTargetType(type), targetEntry, conditionId, effectMask)));
@@ -2306,7 +2308,7 @@ bool SpellMgr::IsSpellValid(SpellEntry const* spellInfo, Player* pl, bool msg)
                     if (msg)
                     {
                         if (pl)
-                            ChatHandler(pl).PSendSysMessage("Craft spell %u create item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, spellInfo->EffectItemType[i]);
+                            pl->PSendSysMessage("Craft spell %u create item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, spellInfo->EffectItemType[i]);
                         else
                             sLog.Out(LOG_DBERROR, LOG_LVL_ERROR, "Craft spell %u create item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, spellInfo->EffectItemType[i]);
                     }
@@ -2324,7 +2326,7 @@ bool SpellMgr::IsSpellValid(SpellEntry const* spellInfo, Player* pl, bool msg)
                     if (msg)
                     {
                         if (pl)
-                            ChatHandler(pl).PSendSysMessage("Spell %u learn to broken spell %u, and then...", spellInfo->Id, spellInfo->EffectTriggerSpell[i]);
+                            pl->PSendSysMessage("Spell %u learn to broken spell %u, and then...", spellInfo->Id, spellInfo->EffectTriggerSpell[i]);
                         else
                             sLog.Out(LOG_DBERROR, LOG_LVL_ERROR, "Spell %u learn to invalid spell %u, and then...", spellInfo->Id, spellInfo->EffectTriggerSpell[i]);
                     }
@@ -2344,7 +2346,7 @@ bool SpellMgr::IsSpellValid(SpellEntry const* spellInfo, Player* pl, bool msg)
                 if (msg)
                 {
                     if (pl)
-                        ChatHandler(pl).PSendSysMessage("Craft spell %u requires reagent item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, j);
+                        pl->PSendSysMessage("Craft spell %u requires reagent item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, j);
                     else
                         sLog.Out(LOG_DBERROR, LOG_LVL_ERROR, "Craft spell %u requires reagent item (Entry: %u) but item does not exist in item_template.", spellInfo->Id, j);
                 }
