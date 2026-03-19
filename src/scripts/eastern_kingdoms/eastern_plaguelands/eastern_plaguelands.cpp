@@ -217,23 +217,12 @@ struct npc_eris_havenfireAI : public ScriptedAI
         if (!summoned)
             return;
 
-        std::vector<uint32> mobsEntries;
-        std::vector<uint32>::iterator entriesIt;
-        mobsEntries.push_back(NPC_PEASANT_0);
-        mobsEntries.push_back(NPC_PEASANT_1);
-
-        for (entriesIt = mobsEntries.begin(); entriesIt != mobsEntries.end(); ++entriesIt)
+        std::list<Creature*> tmpMobsList;
+        GetCreatureListWithEntryInGrid(tmpMobsList, m_creature, { NPC_PEASANT_0 , NPC_PEASANT_1 }, 100.0f);
+        for (auto const& curr : tmpMobsList)
         {
-            std::list<Creature*> tmpMobsList;
-            GetCreatureListWithEntryInGrid(tmpMobsList, m_creature, (*entriesIt), 100.0f);
-            while (!tmpMobsList.empty())
-            {
-                Creature* curr = tmpMobsList.front();
-                tmpMobsList.pop_front();
-
-                if (curr->IsAlive())
-                    summoned->AddThreat(curr, float(urand(100, 200)));
-            }
+            if (curr->IsAlive())
+                summoned->AddThreat(curr, float(urand(100, 200)));
         }
 
         if (Player* player = GetPlayer())
@@ -253,32 +242,17 @@ struct npc_eris_havenfireAI : public ScriptedAI
                 }
             }
         }
-        mobsEntries.clear();
     }
 
     void DespawnAll()
     {
-        std::vector<uint32> mobsEntries;
-        std::vector<uint32>::iterator entriesIt;
-        mobsEntries.push_back(NPC_PEASANT_0);
-        mobsEntries.push_back(NPC_PEASANT_1);
-        mobsEntries.push_back(NPC_WARRIOR);
-        mobsEntries.push_back(NPC_ARCHER);
-
-        for (entriesIt = mobsEntries.begin(); entriesIt != mobsEntries.end(); ++entriesIt)
+        std::list<Creature*> tmpMobsList;
+        GetCreatureListWithEntryInGrid(tmpMobsList, m_creature, { NPC_PEASANT_0 , NPC_PEASANT_1 , NPC_WARRIOR , NPC_ARCHER }, 150.0f);
+        for (auto const& curr : tmpMobsList)
         {
-            std::list<Creature*> tmpMobsList;
-            GetCreatureListWithEntryInGrid(tmpMobsList, m_creature, (*entriesIt), 150.0f);
-            while (!tmpMobsList.empty())
-            {
-                Creature* curr = tmpMobsList.front();
-                tmpMobsList.pop_front();
-
-                if (curr->IsAlive())
-                    curr->ForcedDespawn();
-            }
+            if (curr->IsAlive())
+                curr->ForcedDespawn();
         }
-        mobsEntries.clear();
 
         for (auto& guid : m_deathPostGUIDs)
         {
@@ -300,9 +274,6 @@ struct npc_eris_havenfireAI : public ScriptedAI
                     ++j;
 
                 m_archerGUIDs[j] = summoned->GetGUID();
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING);
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                summoned->AddUnitState(UNIT_STATE_ROOT);
                 break;
             case NPC_WARRIOR:
                 SetAttackOnPeasantOrPlayer(summoned);
@@ -317,8 +288,6 @@ struct npc_eris_havenfireAI : public ScriptedAI
                 if (j < 50)
                     m_villagerGUIDs[j] = summoned->GetGUID();
 
-                if (Player* player = GetPlayer())
-                    summoned->SetFactionTemplateId(player->GetFactionTemplateId());
                 summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PVP);
                 break;
         }
@@ -671,9 +640,9 @@ struct npc_eris_havenfire_peasantAI : public ScriptedAI
 
     void KilledUnit(Unit* victim) override { }
 
-    void DamageTaken(Unit *done_by, uint32 &damage) override
+    void DamageTaken(Unit* pAttacker, uint32 &damage) override
     {
-        if (done_by->GetEntry() == NPC_ARCHER)
+        if (pAttacker->GetEntry() == NPC_ARCHER)
             damage = urand(80, 105);
     }
 
@@ -1159,7 +1128,7 @@ struct go_darrowshire_triggerAI : public GameObjectAI
                 summoned->GetMotionMaster()->MovePoint(2, DarrowshireEvent[4].X, DarrowshireEvent[4].Y, DarrowshireEvent[4].Z, MOVE_PATHFINDING, 5.0f);
                 break;
             case NPC_MARDUK_THE_BLACK:
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_IMMUNE_TO_NPC | UNIT_FLAG_SPAWNING);
+                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_IMMUNE_TO_NPC);
                 summoned->ForcedDespawn(12000);
                 break;
             default:
@@ -1746,7 +1715,7 @@ CreatureAI* GetAI_npc_joseph_redpath(Creature* pCreature)
 
 bool GossipHello_npc_joseph_redpath(Player* pPlayer, Creature* pCreature)
 {
-    pPlayer->SEND_GOSSIP_MENU(10935, pCreature->GetGUID());
+    pPlayer->SEND_GOSSIP_MENU(3861, pCreature->GetGUID());
     if (pPlayer->GetQuestStatus(QUEST_BATTLE_DARROWSHIRE) == QUEST_STATUS_INCOMPLETE)
     {
         pPlayer->KilledMonsterCredit(NPC_JOSEPH_REDPATH, pCreature->GetObjectGuid());
@@ -1779,15 +1748,14 @@ bool EffectDummyGameObj_go_mark_of_detonation(WorldObject* pCaster, uint32 uiSpe
                 // TODO: move this to db as On Death event script on the creature with guid condition
                 static std::map<uint32 /*npcGuid*/, std::vector<uint32 /*goGuid*/>> const fireObjectsMap =
                 {
-                    // TODO: fire and smoke gameobjects for the other positions are not sniffed
-                    // { 53157, {} },
-                    // { 53168, {} },
-                    // { 54270, {} },
-                    { 54271 ,{ 2780, 2781, 2782, 2783, 2784, 2787, 2790, 2791, 2792, 2793 } }
-                    // { 56689, {} },
-                    // { 92232, {} },
-                    // { 92254, {} },
-                    // { 92262, {} },
+                    { 53157, { 35947, 35948, 35949, 35950, 35951, 35952, 35953, 35954, 35955, 35956 } },
+                    { 53168, { 35936, 35937, 35938, 35939, 35940, 35941, 35942, 35943, 35944, 35945 } },
+                    { 54270, { 35903, 35904, 35905, 35906, 35907, 35908, 35909, 35910, 35911, 35912 } },
+                    { 54271 ,{ 35892, 35893, 35894, 35895, 35896, 35897, 35898, 35899, 35900, 35901 } },
+                    { 56689, { 35958, 35959, 35960, 35961, 35962, 35963, 35964, 35965, 35966, 35967 } },
+                    { 92232, { 35881, 35882, 35883, 35884, 35885, 35886, 35887, 35888, 35889, 35890 } },
+                    { 92254, { 35925, 35926, 35927, 35928, 35929, 35930, 35931, 35932, 35933, 35934 } },
+                    { 92262, { 35914, 35915, 35916, 35917, 35918, 35919, 35920, 35921, 35922, 35923 } },
                 };
 
                 auto itr = fireObjectsMap.find(pCreature->GetGUIDLow());
@@ -1796,7 +1764,7 @@ bool EffectDummyGameObj_go_mark_of_detonation(WorldObject* pCaster, uint32 uiSpe
                     ScriptInfo script;
                     script.id = uiSpellId;
                     script.command = SCRIPT_COMMAND_RESPAWN_GAMEOBJECT;
-                    script.respawnGo.despawnDelay = 12;
+                    script.respawnGo.despawnDelay = 180;
                     for (auto const& goGuid : itr->second)
                     {
                         script.respawnGo.goGuid = goGuid;

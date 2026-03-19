@@ -22,6 +22,8 @@
 #ifndef _BYTEBUFFER_H
 #define _BYTEBUFFER_H
 
+#include <array>
+
 #include "Common.h"
 #include "Utilities/ByteConverter.h"
 
@@ -60,7 +62,7 @@ class ByteBuffer
         }
 
         // constructor
-        ByteBuffer(size_t res): _rpos(0), _wpos(0)
+        explicit ByteBuffer(size_t res): _rpos(0), _wpos(0)
         {
             _storage.reserve(res);
         }
@@ -423,7 +425,13 @@ class ByteBuffer
             append((uint8 const*)str.c_str(), str.size() + 1);
         }
 
-        void append(std::vector<uint8> const& src) 
+        void append(std::vector<uint8> const& src)
+        {
+            return append(src.data(), src.size());
+        }
+
+        template<size_t Size>
+        void append(std::array<uint8, Size> const& src)
         {
             return append(src.data(), src.size());
         }
@@ -469,9 +477,9 @@ class ByteBuffer
         void appendPackXYZ(float x, float y, float z)
         {
             uint32 packed = 0;
-            packed |= ((int)(x / 0.25f) & 0x7FF);
-            packed |= ((int)(y / 0.25f) & 0x7FF) << 11;
-            packed |= ((int)(z / 0.25f) & 0x3FF) << 22;
+            packed |= ((int)lroundf(x * 4.0f) & 0x7FF);
+            packed |= ((int)lroundf(y * 4.0f) & 0x7FF) << 11;
+            packed |= ((int)lroundf(z * 4.0f) & 0x3FF) << 22;
             *this << packed;
         }
 

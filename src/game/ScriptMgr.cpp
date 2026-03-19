@@ -347,7 +347,9 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, char const* tablename)
                     }
 
                     if (info->type == GAMEOBJECT_TYPE_FISHINGNODE ||
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_6_1
                         info->type == GAMEOBJECT_TYPE_FISHINGHOLE ||
+#endif
                         info->type == GAMEOBJECT_TYPE_DOOR)
                     {
                         sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `%s` have gameobject type (%u) unsupported by command SCRIPT_COMMAND_RESPAWN_GAMEOBJECT for script id %u", tablename, info->id, tmp.id);
@@ -2319,7 +2321,7 @@ void ScriptMgr::LoadEscortData()
 
     if (pResult)
     {
-        barGoLink bar(pResult->GetRowCount());
+        BarGoLink bar(pResult->GetRowCount());
         do
         {
             bar.step();
@@ -2364,7 +2366,7 @@ void ScriptMgr::LoadEscortData()
     }
     else
     {
-        barGoLink bar(1);
+        BarGoLink bar(1);
         bar.step();
         sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "");
         sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded 0 Escort Creature Data. DB table `script_escort_data` is empty.");

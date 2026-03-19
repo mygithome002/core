@@ -177,10 +177,8 @@ void ChaseMovementGenerator<T>::_setTargetLocation(T &owner)
                 i_target->GetSafePosition(x, y, z);
     }
 
+    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator<T>::_setTargetLocation");
     PathFinder path(&owner);
-
-    // allow pets following their master to cheat while generating paths
-    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator");
     path.SetTransport(transport);
     path.calculate(x, y, z, false);
 
@@ -205,13 +203,13 @@ void ChaseMovementGenerator<T>::_setTargetLocation(T &owner)
         m_bReachable = true;
 
     m_bRecalculateTravel = false;
-    if (this->GetMovementGeneratorType() == CHASE_MOTION_TYPE && !transport && owner.HasDistanceCasterMovement())
-        if (path.UpdateForCaster(i_target.getTarget(), owner.GetMinChaseDistance(i_target.getTarget())))
-        {
-            if (!owner.movespline->Finalized())
-                owner.StopMoving();
-            return;
-        }
+    if (!transport && owner.HasDistanceCasterMovement() && 
+        path.UpdateForCaster(i_target.getTarget(), owner.GetMinChaseDistance(i_target.getTarget())))
+    {
+        if (!owner.movespline->Finalized())
+            owner.StopMoving();
+        return;
+    }
 
     // Prevent redundant moves
     if ((path.Length() < 4.0f && (i_target->GetPositionZ() - owner.GetPositionZ()) > 10.0f) || // He is flying too high for me. Moving a few meters wont change anything.
@@ -433,7 +431,7 @@ void ChaseMovementGenerator<T>::DoBackMovement(T &owner, Unit* target)
         return;
 
     m_bIsSpreading = true;
-    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator");
+    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator<T>::DoBackMovement");
     init.MoveTo(x, y, z, MOVE_WALK_MODE);
     init.SetWalk(true);
     init.Launch();
@@ -485,7 +483,7 @@ void ChaseMovementGenerator<T>::DoSpreadIfNeeded(T &owner, Unit* target)
     if (m_uiSpreadAttempts >= MAX_SPREAD_ATTEMPTS)
         m_bCanSpread = false;
 
-    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator");
+    Movement::MoveSplineInit init(owner, "ChaseMovementGenerator<T>::DoSpreadIfNeeded");
     init.MoveTo(x, y, z, MOVE_WALK_MODE);
     init.SetWalk(true);
     init.Launch();
@@ -641,7 +639,7 @@ void FollowMovementGenerator<T>::_setTargetLocation(T &owner)
     PathFinder path(&owner);
 
     // allow pets following their master to cheat while generating paths
-    Movement::MoveSplineInit init(owner, "FollowMovementGenerator");
+    Movement::MoveSplineInit init(owner, "FollowMovementGenerator<T>::_setTargetLocation");
     path.SetTransport(transport);
     path.calculate(x, y, z, true);
 
@@ -652,13 +650,6 @@ void FollowMovementGenerator<T>::_setTargetLocation(T &owner)
         m_bReachable = true;
 
     m_bRecalculateTravel = false;
-    if (this->GetMovementGeneratorType() == CHASE_MOTION_TYPE && !transport && owner.HasDistanceCasterMovement())
-        if (path.UpdateForCaster(i_target.getTarget(), owner.GetMinChaseDistance(i_target.getTarget())))
-        {
-            if (!owner.movespline->Finalized())
-                owner.StopMoving();
-            return;
-        }
 
     // Prevent redundant moves
     // He is flying too high for me. Moving a few meters wont change anything.

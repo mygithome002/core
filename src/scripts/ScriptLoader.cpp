@@ -4,10 +4,6 @@
 
 #include "scriptPCH.h"
 
-// AI system
-void AddSC_generic_spell_ai();
-void AddSC_npc_escort();
-
 //battlegrounds
 void AddSC_battleground();
 void AddSC_bg_alterac();
@@ -79,7 +75,6 @@ void AddSC_boss_thermaplugg();
 void AddSC_instance_gnomeregan();
 
 void AddSC_boss_lucifron();                          //molten_core
-void AddSC_boss_magmadar();
 void AddSC_boss_gehennas();
 void AddSC_boss_garr();
 void AddSC_boss_baron_geddon();
@@ -254,10 +249,6 @@ void AddSC_warrior_spell_scripts();
 
 void AddScripts()
 {
-    //Nostalrius
-    AddSC_generic_spell_ai();
-    AddSC_npc_escort();
-
     //battlegrounds
     AddSC_battleground();
     AddSC_bg_alterac();
@@ -328,7 +319,6 @@ void AddScripts()
     AddSC_boss_thermaplugg();
     AddSC_instance_gnomeregan();
     AddSC_boss_lucifron();                                  //molten_core
-    AddSC_boss_magmadar();
     AddSC_boss_gehennas();
     AddSC_boss_garr();
     AddSC_boss_baron_geddon();

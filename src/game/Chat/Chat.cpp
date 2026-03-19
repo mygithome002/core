@@ -101,6 +101,8 @@ ChatCommand * ChatHandler::getCommandTable()
         { "attackstop", SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotAttackStopCommand,  "", nullptr },
         { "pull",       SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotPullCommand,        "", nullptr },
         { "aoe",        SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotAoECommand,         "", nullptr },
+        { "caststart",  SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotStartCastingCommand, "", nullptr },
+        { "caststop",   SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotStopCastingCommand, "", nullptr },
         { "ccmark",     SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotControlMarkCommand, "", nullptr },
         { "focusmark",  SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotFocusMarkCommand,   "", nullptr },
         { "clearmarks", SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotClearMarksCommand,  "", nullptr },
@@ -112,6 +114,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "remove",     SEC_ADMINISTRATOR,      false, &ChatHandler::HandlePartyBotRemoveCommand,      "", nullptr },
         { nullptr,      0,                      false, nullptr,                                        "", nullptr },
     };
+
     static ChatCommand battleBotAddCommandTable[] =
     {
         { "alterac",    SEC_ADMINISTRATOR,      true, &ChatHandler::HandleBattleBotAddAlteracCommand, "", nullptr },
@@ -448,6 +451,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "uninvite",       SEC_GAMEMASTER,     true,  &ChatHandler::HandleGuildUninviteCommand,       "", nullptr },
         { "rank",           SEC_GAMEMASTER,     true,  &ChatHandler::HandleGuildRankCommand,           "", nullptr },
         { "rename",         SEC_BASIC_ADMIN,    true,  &ChatHandler::HandleGuildRenameCommand,         "", nullptr },
+        { "showlog",        SEC_GAMEMASTER,     true,  &ChatHandler::HandleGuildShowLogCommand,        "", nullptr },
         { nullptr,          0,                  false, nullptr,                                        "", nullptr }
     };
 
@@ -896,6 +900,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "spell_script_target",          SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadSpellScriptTargetCommand,       "", nullptr },
         { "spell_scripts",                SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadSpellScriptsCommand,            "", nullptr },
         { "spell_target_position",        SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadSpellTargetPositionCommand,     "", nullptr },
+        { "spell_template",               SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadSpellTemplateCommand,           "", nullptr },
         { "spell_threats",                SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadSpellThreatsCommand,            "", nullptr },
         { "taxi_path_transitions",        SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadTaxiPathTransitionsCommand,     "", nullptr },
         { "trainer_greeting",             SEC_DEVELOPER,     true,  &ChatHandler::HandleReloadTrainerGreetingCommand,         "", nullptr },
@@ -2574,7 +2579,9 @@ void ChatHandler::BuildChatPacket(WorldPacket& data, ChatMsg msgtype, char const
         case CHAT_MSG_CHANNEL:
             MANGOS_ASSERT(channelName);
             data << channelName;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_5_1
             data << uint32(playerRank);
+#endif
             data << ObjectGuid(senderGuid);
             break;
 
@@ -3893,6 +3900,15 @@ std::string ChatHandler::GetNameLink(Player* chr) const
     return playerLink(chr->GetName());
 }
 
+std::string ChatHandler::GetNameLink(uint32 guidLow) const
+{
+    std::string name;
+    if (sObjectMgr.GetPlayerNameByGUID(ObjectGuid(HIGHGUID_PLAYER, guidLow), name))
+        return playerLink(name);
+    else
+        return playerLink(std::to_string(guidLow));
+}
+
 std::string ChatHandler::GetItemLink(ItemPrototype const* pItem) const
 {
     if (m_session)
@@ -4064,3 +4080,4 @@ char const* NullChatHandler::GetMangosString(int32 entry) const
 {
     return sObjectMgr.GetMangosStringForDBCLocale(entry);
 }
+

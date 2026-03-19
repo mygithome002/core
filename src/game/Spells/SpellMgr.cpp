@@ -997,7 +997,7 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                         return false;
 
                     // Improved Hamstring -> Hamstring (multi-family check)
-                    if ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x2)) && spellInfo_1->Id == 23694)
+                    if ((spellInfo_2->SpellFamilyFlags & uint64(0x2)) && spellInfo_1->Id == 23694)
                         return false;
                     break;
                 }
@@ -1023,7 +1023,7 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                         return false;
 
                     // Improved Wing Clip -> Wing Clip (multi-family check)
-                    if ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x40)) && spellInfo_1->Id == 19229)
+                    if ((spellInfo_2->SpellFamilyFlags & uint64(0x40)) && spellInfo_1->Id == 19229)
                         return false;
                     break;
                 }
@@ -1045,18 +1045,18 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     return false;
 
                 // Blizzard & Chilled (and some other stacked with blizzard spells
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x80)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x100000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x80)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x100000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x80)) && (spellInfo_2->SpellFamilyFlags & uint64(0x100000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x80)) && (spellInfo_1->SpellFamilyFlags & uint64(0x100000))))
                     return false;
 
                 // Blink & Improved Blink
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x0000000000010000)) && (spellInfo_2->SpellVisual == 72 && spellInfo_2->SpellIconID == 1499)) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x0000000000010000)) && (spellInfo_1->SpellVisual == 72 && spellInfo_1->SpellIconID == 1499)))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x0000000000010000)) && (spellInfo_2->SpellVisual == 72 && spellInfo_2->SpellIconID == 1499)) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x0000000000010000)) && (spellInfo_1->SpellVisual == 72 && spellInfo_1->SpellIconID == 1499)))
                     return false;
 
                 // Fireball & Pyroblast (Dots)
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x1)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x400000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x1)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x400000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x1)) && (spellInfo_2->SpellFamilyFlags & uint64(0x400000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x1)) && (spellInfo_1->SpellFamilyFlags & uint64(0x400000))))
                     return false;
 
                 // Arcane Missiles
@@ -1097,8 +1097,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
             if (spellInfo_2->SpellFamilyName == SPELLFAMILY_WARRIOR)
             {
                 // Rend and Deep Wound
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x20)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x1000000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x20)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x1000000000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x20)) && (spellInfo_2->SpellFamilyFlags & uint64(0x1000000000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x20)) && (spellInfo_1->SpellFamilyFlags & uint64(0x1000000000))))
                     return false;
 
                 // Battle Shout and Rampage
@@ -1112,7 +1112,7 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
             }
 
             // Hamstring -> Improved Hamstring (multi-family check)
-            if ((spellInfo_1->SpellFamilyFlags & UI64LIT(0x2)) && spellInfo_2->Id == 23694)
+            if ((spellInfo_1->SpellFamilyFlags & uint64(0x2)) && spellInfo_2->Id == 23694)
                 return false;
 
             // Defensive Stance and Scroll of Protection (multi-family check)
@@ -1138,13 +1138,13 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     return false;
 
                 //Devouring Plague and Shadow Vulnerability
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x800000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x800000000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x2000000)) && (spellInfo_2->SpellFamilyFlags & uint64(0x800000000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x2000000)) && (spellInfo_1->SpellFamilyFlags & uint64(0x800000000))))
                     return false;
 
                 //StarShards and Shadow Word: Pain
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x200000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x8000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x200000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x8000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x200000)) && (spellInfo_2->SpellFamilyFlags & uint64(0x8000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x200000)) && (spellInfo_1->SpellFamilyFlags & uint64(0x8000))))
                     return false;
             }
             break;
@@ -1156,8 +1156,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     return false;
 
                 //Omen of Clarity and Blood Frenzy
-                if (((spellInfo_1->SpellFamilyFlags == UI64LIT(0x0) && spellInfo_1->SpellIconID == 108) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x20000000000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags == UI64LIT(0x0) && spellInfo_2->SpellIconID == 108) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x20000000000000))))
+                if (((spellInfo_1->SpellFamilyFlags == uint64(0x0) && spellInfo_1->SpellIconID == 108) && (spellInfo_2->SpellFamilyFlags & uint64(0x20000000000000))) ||
+                        ((spellInfo_2->SpellFamilyFlags == uint64(0x0) && spellInfo_2->SpellIconID == 108) && (spellInfo_1->SpellFamilyFlags & uint64(0x20000000000000))))
                     return false;
             }
 
@@ -1175,18 +1175,18 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
             if (spellInfo_2->SpellFamilyName == SPELLFAMILY_HUNTER)
             {
                 // Rapid Fire & Quick Shots
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x20)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x20000000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x20)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x20000000000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x20)) && (spellInfo_2->SpellFamilyFlags & uint64(0x20000000000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x20)) && (spellInfo_1->SpellFamilyFlags & uint64(0x20000000000))))
                     return false;
 
                 // Serpent Sting & (Immolation/Explosive Trap Effect)
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x4)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x00000004000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x4)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x00000004000))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x4)) && (spellInfo_2->SpellFamilyFlags & uint64(0x00000004000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x4)) && (spellInfo_1->SpellFamilyFlags & uint64(0x00000004000))))
                     return false;
 
                 // Wyvern Sting DoT & Immolation Trap Effect - using family flags
-                if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x10000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x4))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x10000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x4))))
+                if (((spellInfo_1->SpellFamilyFlags & uint64(0x10000)) && (spellInfo_2->SpellFamilyFlags & uint64(0x4))) ||
+                        ((spellInfo_2->SpellFamilyFlags & uint64(0x10000)) && (spellInfo_1->SpellFamilyFlags & uint64(0x4))))
                     return false;
 
                 // Bestial Wrath
@@ -1195,7 +1195,7 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
             }
 
             // Wing Clip -> Improved Wing Clip (multi-family check)
-            if ((spellInfo_1->SpellFamilyFlags & UI64LIT(0x40)) && spellInfo_2->Id == 19229)
+            if ((spellInfo_1->SpellFamilyFlags & uint64(0x40)) && spellInfo_2->Id == 19229)
                 return false;
 
             // Concussive Shot and Imp. Concussive Shot (multi-family check)
@@ -2358,6 +2358,61 @@ bool SpellMgr::IsSpellValid(SpellEntry const* spellInfo, Player* pl, bool msg)
     return true;
 }
 
+void SpellMgr::LoadSpellCones()
+{
+    mSpellCones.clear();                              // need for reload case
+
+    uint32 count = 0;
+
+    //                                                               0        1
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT `entry`, `cone_degrees` FROM `spell_cone`"));
+    if (!result)
+    {
+        BarGoLink bar(1);
+        bar.step();
+
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "");
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u spell cones", count);
+        return;
+    }
+
+    BarGoLink bar(result->GetRowCount());
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        bar.step();
+
+        uint32 entry = fields[0].GetUInt32();
+        int16 degrees = fields[1].GetInt16();
+
+        SpellEntry const* pSpellInfo = GetSpellEntry(entry);
+
+        if (!pSpellInfo)
+        {
+            if (!IsExistingSpellId(entry))
+                sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Spell %u listed in `spell_cone` does not exist", entry);
+            continue;
+        }
+
+        if (degrees < -360 || degrees > 360)
+        {
+            sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Spell %u listed in `spell_cone` has incorrect angle %i outside of valid range", entry, degrees);
+            continue;
+        }
+
+        float angle = degrees * M_PI_F / 180.0f;
+
+        mSpellCones[entry] = angle;
+
+        ++count;
+    } while (result->NextRow());
+
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "");
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u spell cones", count);
+}
+
 void SpellMgr::LoadSpellAreas()
 {
     mSpellAreaMap.clear();                                  // need for reload case
@@ -2584,9 +2639,10 @@ void SpellMgr::LoadSpellAreas()
 SpellCastResult SpellMgr::GetSpellAllowedInLocationError(SpellEntry const* spellInfo, Unit const* caster, Player const* player)
 {
     // Spell can be casted only in battleground
-    if (spellInfo->HasAttribute(SPELL_ATTR_EX3_ONLY_BATTLEGROUNDS) &&
-        (!player || !player->InBattleGround()))
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_5_1
+    if (spellInfo->HasAttribute(SPELL_ATTR_EX3_ONLY_BATTLEGROUNDS) && (!player || !player->InBattleGround()))
         return SPELL_FAILED_ONLY_BATTLEGROUNDS;
+#endif
 
     uint32 mapId = caster ? caster->GetMapId() : (player ? player->GetMapId() : 0);
 
@@ -2610,6 +2666,7 @@ SpellCastResult SpellMgr::GetSpellAllowedInLocationError(SpellEntry const* spell
         case 23333:                                         // Warsong Flag
         case 23335:                                         // Silverwing Flag
             return player && player->GetMapId() == MAP_WARSONG_GULCH && player->InBattleGround() ? SPELL_CAST_OK : SPELL_FAILED_REQUIRES_AREA;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_5_1
         case 2584:                                          // Waiting to Resurrect
         {
             return player && player->InBattleGround() ? SPELL_CAST_OK : SPELL_FAILED_ONLY_BATTLEGROUNDS;
@@ -2623,6 +2680,7 @@ SpellCastResult SpellMgr::GetSpellAllowedInLocationError(SpellEntry const* spell
                 return SPELL_FAILED_REQUIRES_AREA;
             return mapEntry->IsBattleGround() ? SPELL_CAST_OK : SPELL_FAILED_ONLY_BATTLEGROUNDS;
         }
+#endif
     }
 
     if (caster)
@@ -2658,12 +2716,6 @@ uint32 SpellMgr::GetRequiredAreaForSpell(uint32 spellId)
     // Not defined in database.
     switch (spellId)
     {
-        // Alterac Valley
-        case 22564: // Recall (Alliance)
-        case 22563: // Recall (Horde)
-        case 23538: // Battle Standard (Horde)
-        case 23539: // Battle Standard (Alliance)
-            return 2597;
         // Warsong Gulch
         case 23333: // Warsong Flag
         case 23335: // Silverwing Flag
@@ -2845,9 +2897,9 @@ void SpellMgr::CheckUsedSpells(char const* table)
                 continue;
             }
 
-            if (familyMask != UI64LIT(0xFFFFFFFFFFFFFFFF))
+            if (familyMask != uint64(0xFFFFFFFFFFFFFFFF))
             {
-                if (familyMask == UI64LIT(0x0000000000000000))
+                if (familyMask == uint64(0x0000000000000000))
                 {
                     if (spellEntry->SpellFamilyFlags)
                     {
@@ -2930,9 +2982,9 @@ void SpellMgr::CheckUsedSpells(char const* table)
                 if (family >= 0 && spellEntry->SpellFamilyName != uint32(family))
                     continue;
 
-                if (familyMask != UI64LIT(0xFFFFFFFFFFFFFFFF))
+                if (familyMask != uint64(0xFFFFFFFFFFFFFFFF))
                 {
-                    if (familyMask == UI64LIT(0x0000000000000000))
+                    if (familyMask == uint64(0x0000000000000000))
                     {
                         if (spellEntry->SpellFamilyFlags)
                             continue;
@@ -3373,6 +3425,35 @@ namespace SpellInternal
         }
         return true;
     }
+
+    uint32 GetAllowedTargetMask(SpellEntry const* spellInfo)
+    {
+        uint32 targetMask = spellInfo->Targets;
+
+        for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        {
+            if (spellInfo->Effect[i])
+            {
+                targetMask |= GetAllowedTargetMaskForTargetType((SpellTarget)spellInfo->EffectImplicitTargetA[i]);
+                targetMask |= GetAllowedTargetMaskForTargetType((SpellTarget)spellInfo->EffectImplicitTargetB[i]);
+            }
+        }
+
+        if (targetMask & (TARGET_FLAG_UNIT_RAID | TARGET_FLAG_UNIT_PARTY | TARGET_FLAG_UNIT_ENEMY | TARGET_FLAG_UNIT_ALLY | TARGET_FLAG_UNIT_DEAD | TARGET_FLAG_UNIT_MINIPET))
+            targetMask |= TARGET_FLAG_UNIT;
+
+        if (targetMask & (TARGET_FLAG_LOCKED))
+            targetMask |= TARGET_FLAG_ITEM | TARGET_FLAG_GAMEOBJECT;
+
+        if (targetMask & (TARGET_FLAG_ITEM))
+            targetMask |= TARGET_FLAG_TRADE_ITEM;
+
+        // unreleased player corpse is still a unit
+        if (targetMask & (TARGET_FLAG_CORPSE_ENEMY | TARGET_FLAG_CORPSE_ALLY))
+            targetMask |= TARGET_FLAG_UNIT;
+
+        return targetMask;
+    }
 }
 
 void SpellMgr::AssignInternalSpellFlags()
@@ -3431,6 +3512,8 @@ void SpellMgr::AssignInternalSpellFlags()
 
             if (SpellInternal::IsCCSpell(pSpellEntry.get()))
                 pSpellEntry->Internal |= SPELL_INTERNAL_CROWD_CONTROL;
+
+            pSpellEntry->AllowedTargetMask = SpellInternal::GetAllowedTargetMask(pSpellEntry.get());
         }
     }
 }
@@ -3625,276 +3708,16 @@ void SpellMgr::LoadSpells()
         return;
     }
 
-    mSpellEntryMap.resize(maxEntry);
+    if (maxEntry > mSpellEntryMap.size())
+        mSpellEntryMap.resize(maxEntry);
+
     BarGoLink bar(result->GetRowCount());
 
     do
     {
         bar.step();
         fields = result->Fetch();
-
-        std::unique_ptr<SpellEntry> spell = std::make_unique<SpellEntry>();
-
-        uint32 spellId = fields[0].GetUInt32();
-
-        spell->Id = spellId;
-        spell->School = fields[2].GetUInt32();
-        spell->Category = fields[3].GetUInt32();
-        //spell->castUI = fields[4].GetUInt32(); not used
-        spell->Dispel = fields[5].GetUInt32();
-        spell->Mechanic = fields[6].GetUInt32();
-        spell->Attributes = fields[7].GetUInt32();
-        spell->AttributesEx = fields[8].GetUInt32();
-        spell->AttributesEx2 = fields[9].GetUInt32();
-        spell->AttributesEx3 = fields[10].GetUInt32();
-        spell->AttributesEx4 = fields[11].GetUInt32();
-        spell->Stances = fields[12].GetUInt32();
-        spell->StancesNot = fields[13].GetUInt32();
-        spell->Targets = fields[14].GetUInt32();
-        spell->TargetCreatureType = fields[15].GetUInt32();
-        spell->RequiresSpellFocus = fields[16].GetUInt32();
-        spell->CasterAuraState = fields[17].GetUInt32();
-        spell->TargetAuraState = fields[18].GetUInt32();
-        spell->CastingTimeIndex = fields[19].GetUInt32();
-        spell->RecoveryTime = fields[20].GetUInt32();
-        spell->CategoryRecoveryTime = fields[21].GetUInt32();
-        spell->InterruptFlags = fields[22].GetUInt32();
-        spell->AuraInterruptFlags = fields[23].GetUInt32();
-        spell->ChannelInterruptFlags = fields[24].GetUInt32();
-        spell->procFlags = fields[25].GetUInt32();
-        spell->procChance = fields[26].GetUInt32();
-        spell->procCharges = fields[27].GetUInt32();
-        spell->maxLevel = fields[28].GetUInt32();
-        spell->baseLevel = fields[29].GetUInt32();
-        spell->spellLevel = fields[30].GetUInt32();
-        spell->DurationIndex = fields[31].GetUInt32();
-        spell->powerType = fields[32].GetUInt32();
-        spell->manaCost = fields[33].GetUInt32();
-        spell->manaCostPerlevel = fields[34].GetUInt32();
-        spell->manaPerSecond = fields[35].GetUInt32();
-        spell->manaPerSecondPerLevel = fields[36].GetUInt32();
-        spell->rangeIndex = fields[37].GetUInt32();
-        spell->speed = fields[38].GetFloat();
-        //spell->modalNextSpell = fields[39].GetUInt32(); not used
-        spell->StackAmount = fields[40].GetUInt32();
-        spell->Totem[0] = fields[41].GetUInt32();
-        spell->Totem[1] = fields[42].GetUInt32();
-        spell->Reagent[0] = fields[43].GetInt32();
-        spell->Reagent[1] = fields[44].GetInt32();
-        spell->Reagent[2] = fields[45].GetInt32();
-        spell->Reagent[3] = fields[46].GetInt32();
-        spell->Reagent[4] = fields[47].GetInt32();
-        spell->Reagent[5] = fields[48].GetInt32();
-        spell->Reagent[6] = fields[49].GetInt32();
-        spell->Reagent[7] = fields[50].GetInt32();
-        spell->ReagentCount[0] = fields[51].GetUInt32();
-        spell->ReagentCount[1] = fields[52].GetUInt32();
-        spell->ReagentCount[2] = fields[53].GetUInt32();
-        spell->ReagentCount[3] = fields[54].GetUInt32();
-        spell->ReagentCount[4] = fields[55].GetUInt32();
-        spell->ReagentCount[5] = fields[56].GetUInt32();
-        spell->ReagentCount[6] = fields[57].GetUInt32();
-        spell->ReagentCount[7] = fields[58].GetUInt32();
-        spell->EquippedItemClass = fields[59].GetInt32();
-        spell->EquippedItemSubClassMask = fields[60].GetInt32();
-        spell->EquippedItemInventoryTypeMask = fields[61].GetInt32();
-        spell->Effect[0] = fields[62].GetUInt32();
-        spell->Effect[1] = fields[63].GetUInt32();
-        spell->Effect[2] = fields[64].GetUInt32();
-        spell->EffectDieSides[0] = fields[65].GetInt32();
-        spell->EffectDieSides[1] = fields[66].GetInt32();
-        spell->EffectDieSides[2] = fields[67].GetInt32();
-        spell->EffectBaseDice[0] = fields[68].GetUInt32();
-        spell->EffectBaseDice[1] = fields[69].GetUInt32();
-        spell->EffectBaseDice[2] = fields[70].GetUInt32();
-        spell->EffectDicePerLevel[0] = fields[71].GetFloat();
-        spell->EffectDicePerLevel[1] = fields[72].GetFloat();
-        spell->EffectDicePerLevel[2] = fields[73].GetFloat();
-        spell->EffectRealPointsPerLevel[0] = fields[74].GetFloat();
-        spell->EffectRealPointsPerLevel[1] = fields[75].GetFloat();
-        spell->EffectRealPointsPerLevel[2] = fields[76].GetFloat();
-        spell->EffectBasePoints[0] = fields[77].GetInt32();
-        spell->EffectBasePoints[1] = fields[78].GetInt32();
-        spell->EffectBasePoints[2] = fields[79].GetInt32();
-        spell->EffectBonusCoefficient[0] = fields[80].GetFloat();
-        spell->EffectBonusCoefficient[1] = fields[81].GetFloat();
-        spell->EffectBonusCoefficient[2] = fields[82].GetFloat();
-        spell->EffectMechanic[0] = fields[83].GetUInt32();
-        spell->EffectMechanic[1] = fields[84].GetUInt32();
-        spell->EffectMechanic[2] = fields[85].GetUInt32();
-        spell->EffectImplicitTargetA[0] = fields[86].GetUInt32();
-        spell->EffectImplicitTargetA[1] = fields[87].GetUInt32();
-        spell->EffectImplicitTargetA[2] = fields[88].GetUInt32();
-        spell->EffectImplicitTargetB[0] = fields[89].GetUInt32();
-        spell->EffectImplicitTargetB[1] = fields[90].GetUInt32();
-        spell->EffectImplicitTargetB[2] = fields[91].GetUInt32();
-        spell->EffectRadiusIndex[0] = fields[92].GetUInt32();
-        spell->EffectRadiusIndex[1] = fields[93].GetUInt32();
-        spell->EffectRadiusIndex[2] = fields[94].GetUInt32();
-        spell->EffectApplyAuraName[0] = fields[95].GetUInt32();
-        spell->EffectApplyAuraName[1] = fields[96].GetUInt32();
-        spell->EffectApplyAuraName[2] = fields[97].GetUInt32();
-        spell->EffectAmplitude[0] = fields[98].GetUInt32();
-        spell->EffectAmplitude[1] = fields[99].GetUInt32();
-        spell->EffectAmplitude[2] = fields[100].GetUInt32();
-        spell->EffectMultipleValue[0] = fields[101].GetFloat();
-        spell->EffectMultipleValue[1] = fields[102].GetFloat();
-        spell->EffectMultipleValue[2] = fields[103].GetFloat();
-        spell->EffectChainTarget[0] = fields[104].GetUInt32();
-        spell->EffectChainTarget[1] = fields[105].GetUInt32();
-        spell->EffectChainTarget[2] = fields[106].GetUInt32();
-        spell->EffectItemType[0] = fields[107].GetUInt64();
-        spell->EffectItemType[1] = fields[108].GetUInt64();
-        spell->EffectItemType[2] = fields[109].GetUInt64();
-        spell->EffectMiscValue[0] = fields[110].GetInt32();
-        spell->EffectMiscValue[1] = fields[111].GetInt32();
-        spell->EffectMiscValue[2] = fields[112].GetInt32();
-        spell->EffectTriggerSpell[0] = fields[113].GetUInt32();
-        spell->EffectTriggerSpell[1] = fields[114].GetUInt32();
-        spell->EffectTriggerSpell[2] = fields[115].GetUInt32();
-        spell->EffectPointsPerComboPoint[0] = fields[116].GetFloat();
-        spell->EffectPointsPerComboPoint[1] = fields[117].GetFloat();
-        spell->EffectPointsPerComboPoint[2] = fields[118].GetFloat();
-        spell->SpellVisual = fields[119].GetUInt32();
-        //spell->SpellVisual2 = fields[120].GetUInt32(); not used
-        spell->SpellIconID = fields[121].GetUInt32();
-        spell->activeIconID = fields[122].GetUInt32();
-        spell->spellPriority = fields[123].GetUInt32();
-        spell->SpellName[0] = fields[124].GetCppString();
-        //spell->SpellNameFlag = fields[125].GetUInt32(); not used
-        spell->Rank[0] = fields[126].GetCppString();
-        /* not used
-        spell->RankFlags = fields[127].GetUInt32();
-        spell->Description[0] = fields[128].GetCppString();
-        spell->DescriptionFlags = fields[129].GetUInt32();
-        spell->ToolTip[0] = fields[130].GetCppString();
-        spell->ToolTipFlags = fields[131].GetUInt32();
-        */
-        spell->ManaCostPercentage = fields[132].GetUInt32();
-        spell->StartRecoveryCategory = fields[133].GetUInt32();
-        spell->StartRecoveryTime = fields[134].GetUInt32();
-        spell->MinTargetLevel = fields[135].GetUInt32();
-        spell->MaxTargetLevel = fields[136].GetUInt32();
-        spell->SpellFamilyName = fields[137].GetUInt32();
-        spell->SpellFamilyFlags = fields[138].GetUInt64();
-        spell->MaxAffectedTargets = fields[139].GetUInt32();
-        spell->DmgClass = fields[140].GetUInt32();
-        spell->PreventionType = fields[141].GetUInt32();
-        //spell->StanceBarOrder = fields[142].GetInt32();
-        spell->DmgMultiplier[0] = fields[143].GetFloat();
-        spell->DmgMultiplier[1] = fields[144].GetFloat();
-        spell->DmgMultiplier[2] = fields[145].GetFloat();
-        //spell->MinFactionId = fields[146].GetUInt32();
-        //spell->MinReputation = fields[147].GetUInt32();
-        //spell->RequiredAuraVision = fields[148].GetUInt32();
-        spell->Custom = fields[149].GetUInt32();
-        spell->ScriptId = sScriptMgr.GetScriptId(fields[150].GetString());
-
-        // It seems that in vanilla when the Amplitude of a
-        // periodic aura was 0, it defaulted to a 5 seconds timer.
-        // Check out Violet Tragan (Item 8526, Spell 6727).
-        // There are comments from vanilla saying it does
-        // damage every 5 seconds, while TBC comments say
-        // it does no damage, so behavior changed then.
-        // In classic the spell was edited in 1.13.6 and
-        // the timer was set to 5000, as it didn't work before.
-        for (int i = EFFECT_INDEX_0; i <= EFFECT_INDEX_2; ++i)
-        {
-            switch (spell->EffectApplyAuraName[i])
-            {
-                case SPELL_AURA_PERIODIC_DAMAGE:
-                case SPELL_AURA_PERIODIC_HEAL:
-                case SPELL_AURA_PERIODIC_TRIGGER_SPELL:
-                case SPELL_AURA_PERIODIC_ENERGIZE:
-                case SPELL_AURA_PERIODIC_LEECH:
-                case SPELL_AURA_PERIODIC_HEALTH_FUNNEL:
-                case SPELL_AURA_PERIODIC_MANA_FUNNEL:
-                case SPELL_AURA_PERIODIC_MANA_LEECH:
-                case SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
-                case SPELL_AURA_POWER_BURN_MANA:
-                    if (spell->EffectAmplitude[i] == 0)
-                        spell->EffectAmplitude[i] = 5000;
-                    break;
-            }
-        }
-
-        // Attribute replaced with aura state in patch 1.8.
-        if (spell->HasAttribute(SPELL_ATTR_EX2_ENABLE_AFTER_PARRY))
-            spell->CasterAuraState = spell->SpellFamilyName == SPELLFAMILY_HUNTER ? AURA_STATE_HUNTER_PARRY : AURA_STATE_DEFENSE;
-
-#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_10_2
-        for (int i = EFFECT_INDEX_0; i <= EFFECT_INDEX_2; ++i)
-        {
-            if (IsEffectAppliesAura(spell->Effect[i]))
-            {
-                switch (spell->EffectApplyAuraName[i])
-                {
-                    // Before 1.11, the spell data specifies TO what percent the speed is reduced, not BY what percent.
-                    case SPELL_AURA_MOD_DECREASE_SPEED:
-                    {
-                        spell->EffectBasePoints[i] = -(100 - spell->EffectBasePoints[i]);
-                        break;
-                    }
-
-#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_8_4
-                    // Before 1.9, the creature family is not a mask.
-                    case SPELL_AURA_MOD_DAMAGE_DONE_CREATURE:
-                    {
-                        spell->EffectMiscValue[i] = 1 << (spell->EffectMiscValue[i] - 1);
-                        break;
-                    }
-                    // Before 1.9, value 0 means all schools.
-                    case SPELL_AURA_MOD_THREAT:
-                    {
-                        if (spell->EffectMiscValue[i] == 0)
-                            spell->EffectMiscValue[i] = 127;
-                        break;
-                    }
-                    // Before 1.9, the school is not a mask.
-                    case SPELL_AURA_MOD_DAMAGE_DONE:
-                    case SPELL_AURA_MOD_DAMAGE_TAKEN:
-                    case SPELL_AURA_MOD_RESISTANCE:
-                    case SPELL_AURA_SCHOOL_IMMUNITY:
-                    case SPELL_AURA_DAMAGE_IMMUNITY:
-                    case SPELL_AURA_SCHOOL_ABSORB:
-                    case SPELL_AURA_MOD_SPELL_CRIT_CHANCE_SCHOOL:
-                    case SPELL_AURA_MOD_POWER_COST_SCHOOL_PCT:
-                    case SPELL_AURA_MOD_POWER_COST_SCHOOL:
-                    case SPELL_AURA_REFLECT_SPELLS_SCHOOL:
-                    case SPELL_AURA_MOD_DAMAGE_PERCENT_DONE:
-                    case SPELL_AURA_SPLIT_DAMAGE_PCT:
-                    case SPELL_AURA_MOD_BASE_RESISTANCE:
-                    case SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN:
-                    case SPELL_AURA_MOD_RESISTANCE_PCT:
-                    case SPELL_AURA_MOD_RANGED_DAMAGE_TAKEN:
-                    case SPELL_AURA_MOD_HEALING:
-                    case SPELL_AURA_MOD_HEALING_PCT:
-                    case SPELL_AURA_MOD_HEALING_DONE:
-                    case SPELL_AURA_MOD_HEALING_DONE_PERCENT:
-                    case SPELL_AURA_MOD_BASE_RESISTANCE_PCT:
-                    case SPELL_AURA_MOD_RESISTANCE_EXCLUSIVE:
-                    case SPELL_AURA_SPLIT_DAMAGE_FLAT:
-                    {
-                        if (spell->EffectMiscValue[i] == -2)
-                            spell->EffectMiscValue[i] = 127; // all schools
-                        else if (spell->EffectMiscValue[i] == -1)
-                            spell->EffectMiscValue[i] = 126; // all magic schools
-                        else
-                            spell->EffectMiscValue[i] = 1 << spell->EffectMiscValue[i];
-                        break;
-                    }
-#endif
-                }
-            }
-        }
-#endif
-        // Before 1.10, the spell proc flags had completely different meanings.
-#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
-        spell->procFlags = ReplaceOldSpellProcFlags(spell->procFlags);
-#endif
-
-        mSpellEntryMap[spellId] = std::move(spell);
-
+        LoadSpell(fields);
     } while (result->NextRow());
 
 #if SUPPORTED_CLIENT_BUILD == CLIENT_BUILD_1_12_1
@@ -3945,4 +3768,269 @@ void SpellMgr::LoadSpells()
 
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "");
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u spells in %ums.", mSpellEntryMap.size(), WorldTimer::getMSTimeDiffToNow(oldMSTime));
+}
+
+void SpellMgr::LoadSpell(Field* fields)
+{
+    uint32 spellId = fields[0].GetUInt32();
+    std::unique_ptr<SpellEntry>& spell = mSpellEntryMap[spellId];
+    if (!spell)
+        spell = std::make_unique<SpellEntry>();
+
+    spell->Id = spellId;
+    spell->School = fields[2].GetUInt32();
+    spell->Category = fields[3].GetUInt32();
+    //spell->castUI = fields[4].GetUInt32(); not used
+    spell->Dispel = fields[5].GetUInt32();
+    spell->Mechanic = fields[6].GetUInt32();
+    spell->Attributes = fields[7].GetUInt32();
+    spell->AttributesEx = fields[8].GetUInt32();
+    spell->AttributesEx2 = fields[9].GetUInt32();
+    spell->AttributesEx3 = fields[10].GetUInt32();
+    spell->AttributesEx4 = fields[11].GetUInt32();
+    spell->Stances = fields[12].GetUInt32();
+    spell->StancesNot = fields[13].GetUInt32();
+    spell->Targets = fields[14].GetUInt32();
+    spell->TargetCreatureType = fields[15].GetUInt32();
+    spell->RequiresSpellFocus = fields[16].GetUInt32();
+    spell->CasterAuraState = fields[17].GetUInt32();
+    spell->TargetAuraState = fields[18].GetUInt32();
+    spell->CastingTimeIndex = fields[19].GetUInt32();
+    spell->RecoveryTime = fields[20].GetUInt32();
+    spell->CategoryRecoveryTime = fields[21].GetUInt32();
+    spell->InterruptFlags = fields[22].GetUInt32();
+    spell->AuraInterruptFlags = fields[23].GetUInt32();
+    spell->ChannelInterruptFlags = fields[24].GetUInt32();
+    spell->procFlags = fields[25].GetUInt32();
+    spell->procChance = fields[26].GetUInt32();
+    spell->procCharges = fields[27].GetUInt32();
+    spell->maxLevel = fields[28].GetUInt32();
+    spell->baseLevel = fields[29].GetUInt32();
+    spell->spellLevel = fields[30].GetUInt32();
+    spell->DurationIndex = fields[31].GetUInt32();
+    spell->powerType = fields[32].GetUInt32();
+    spell->manaCost = fields[33].GetUInt32();
+    spell->manaCostPerlevel = fields[34].GetUInt32();
+    spell->manaPerSecond = fields[35].GetUInt32();
+    spell->manaPerSecondPerLevel = fields[36].GetUInt32();
+    spell->rangeIndex = fields[37].GetUInt32();
+    spell->speed = fields[38].GetFloat();
+    //spell->modalNextSpell = fields[39].GetUInt32(); not used
+    spell->StackAmount = fields[40].GetUInt32();
+    spell->Totem[0] = fields[41].GetUInt32();
+    spell->Totem[1] = fields[42].GetUInt32();
+    spell->Reagent[0] = fields[43].GetInt32();
+    spell->Reagent[1] = fields[44].GetInt32();
+    spell->Reagent[2] = fields[45].GetInt32();
+    spell->Reagent[3] = fields[46].GetInt32();
+    spell->Reagent[4] = fields[47].GetInt32();
+    spell->Reagent[5] = fields[48].GetInt32();
+    spell->Reagent[6] = fields[49].GetInt32();
+    spell->Reagent[7] = fields[50].GetInt32();
+    spell->ReagentCount[0] = fields[51].GetUInt32();
+    spell->ReagentCount[1] = fields[52].GetUInt32();
+    spell->ReagentCount[2] = fields[53].GetUInt32();
+    spell->ReagentCount[3] = fields[54].GetUInt32();
+    spell->ReagentCount[4] = fields[55].GetUInt32();
+    spell->ReagentCount[5] = fields[56].GetUInt32();
+    spell->ReagentCount[6] = fields[57].GetUInt32();
+    spell->ReagentCount[7] = fields[58].GetUInt32();
+    spell->EquippedItemClass = fields[59].GetInt32();
+    spell->EquippedItemSubClassMask = fields[60].GetInt32();
+    spell->EquippedItemInventoryTypeMask = fields[61].GetInt32();
+    spell->Effect[0] = fields[62].GetUInt32();
+    spell->Effect[1] = fields[63].GetUInt32();
+    spell->Effect[2] = fields[64].GetUInt32();
+    spell->EffectDieSides[0] = fields[65].GetInt32();
+    spell->EffectDieSides[1] = fields[66].GetInt32();
+    spell->EffectDieSides[2] = fields[67].GetInt32();
+    spell->EffectBaseDice[0] = fields[68].GetUInt32();
+    spell->EffectBaseDice[1] = fields[69].GetUInt32();
+    spell->EffectBaseDice[2] = fields[70].GetUInt32();
+    spell->EffectDicePerLevel[0] = fields[71].GetFloat();
+    spell->EffectDicePerLevel[1] = fields[72].GetFloat();
+    spell->EffectDicePerLevel[2] = fields[73].GetFloat();
+    spell->EffectRealPointsPerLevel[0] = fields[74].GetFloat();
+    spell->EffectRealPointsPerLevel[1] = fields[75].GetFloat();
+    spell->EffectRealPointsPerLevel[2] = fields[76].GetFloat();
+    spell->EffectBasePoints[0] = fields[77].GetInt32();
+    spell->EffectBasePoints[1] = fields[78].GetInt32();
+    spell->EffectBasePoints[2] = fields[79].GetInt32();
+    spell->EffectBonusCoefficient[0] = fields[80].GetFloat();
+    spell->EffectBonusCoefficient[1] = fields[81].GetFloat();
+    spell->EffectBonusCoefficient[2] = fields[82].GetFloat();
+    spell->EffectMechanic[0] = fields[83].GetUInt32();
+    spell->EffectMechanic[1] = fields[84].GetUInt32();
+    spell->EffectMechanic[2] = fields[85].GetUInt32();
+    spell->EffectImplicitTargetA[0] = fields[86].GetUInt32();
+    spell->EffectImplicitTargetA[1] = fields[87].GetUInt32();
+    spell->EffectImplicitTargetA[2] = fields[88].GetUInt32();
+    spell->EffectImplicitTargetB[0] = fields[89].GetUInt32();
+    spell->EffectImplicitTargetB[1] = fields[90].GetUInt32();
+    spell->EffectImplicitTargetB[2] = fields[91].GetUInt32();
+    spell->EffectRadiusIndex[0] = fields[92].GetUInt32();
+    spell->EffectRadiusIndex[1] = fields[93].GetUInt32();
+    spell->EffectRadiusIndex[2] = fields[94].GetUInt32();
+    spell->EffectApplyAuraName[0] = fields[95].GetUInt32();
+    spell->EffectApplyAuraName[1] = fields[96].GetUInt32();
+    spell->EffectApplyAuraName[2] = fields[97].GetUInt32();
+    spell->EffectAmplitude[0] = fields[98].GetUInt32();
+    spell->EffectAmplitude[1] = fields[99].GetUInt32();
+    spell->EffectAmplitude[2] = fields[100].GetUInt32();
+    spell->EffectMultipleValue[0] = fields[101].GetFloat();
+    spell->EffectMultipleValue[1] = fields[102].GetFloat();
+    spell->EffectMultipleValue[2] = fields[103].GetFloat();
+    spell->EffectChainTarget[0] = fields[104].GetUInt32();
+    spell->EffectChainTarget[1] = fields[105].GetUInt32();
+    spell->EffectChainTarget[2] = fields[106].GetUInt32();
+    spell->EffectItemType[0] = fields[107].GetUInt64();
+    spell->EffectItemType[1] = fields[108].GetUInt64();
+    spell->EffectItemType[2] = fields[109].GetUInt64();
+    spell->EffectMiscValue[0] = fields[110].GetInt32();
+    spell->EffectMiscValue[1] = fields[111].GetInt32();
+    spell->EffectMiscValue[2] = fields[112].GetInt32();
+    spell->EffectTriggerSpell[0] = fields[113].GetUInt32();
+    spell->EffectTriggerSpell[1] = fields[114].GetUInt32();
+    spell->EffectTriggerSpell[2] = fields[115].GetUInt32();
+    spell->EffectPointsPerComboPoint[0] = fields[116].GetFloat();
+    spell->EffectPointsPerComboPoint[1] = fields[117].GetFloat();
+    spell->EffectPointsPerComboPoint[2] = fields[118].GetFloat();
+    spell->SpellVisual = fields[119].GetUInt32();
+    //spell->SpellVisual2 = fields[120].GetUInt32(); not used
+    spell->SpellIconID = fields[121].GetUInt32();
+    spell->activeIconID = fields[122].GetUInt32();
+    spell->spellPriority = fields[123].GetUInt32();
+    spell->SpellName[0] = fields[124].GetCppString();
+    //spell->SpellNameFlag = fields[125].GetUInt32(); not used
+    spell->Rank[0] = fields[126].GetCppString();
+    /* not used
+    spell->RankFlags = fields[127].GetUInt32();
+    spell->Description[0] = fields[128].GetCppString();
+    spell->DescriptionFlags = fields[129].GetUInt32();
+    spell->ToolTip[0] = fields[130].GetCppString();
+    spell->ToolTipFlags = fields[131].GetUInt32();
+    */
+    spell->ManaCostPercentage = fields[132].GetUInt32();
+    spell->StartRecoveryCategory = fields[133].GetUInt32();
+    spell->StartRecoveryTime = fields[134].GetUInt32();
+    spell->MinTargetLevel = fields[135].GetUInt32();
+    spell->MaxTargetLevel = fields[136].GetUInt32();
+    spell->SpellFamilyName = fields[137].GetUInt32();
+    spell->SpellFamilyFlags = fields[138].GetUInt64();
+    spell->MaxAffectedTargets = fields[139].GetUInt32();
+    spell->DmgClass = fields[140].GetUInt32();
+    spell->PreventionType = fields[141].GetUInt32();
+    //spell->StanceBarOrder = fields[142].GetInt32();
+    spell->DmgMultiplier[0] = fields[143].GetFloat();
+    spell->DmgMultiplier[1] = fields[144].GetFloat();
+    spell->DmgMultiplier[2] = fields[145].GetFloat();
+    //spell->MinFactionId = fields[146].GetUInt32();
+    //spell->MinReputation = fields[147].GetUInt32();
+    //spell->RequiredAuraVision = fields[148].GetUInt32();
+    spell->Custom = fields[149].GetUInt32();
+    spell->ScriptId = sScriptMgr.GetScriptId(fields[150].GetString());
+
+    // It seems that in vanilla when the Amplitude of a
+    // periodic aura was 0, it defaulted to a 5 seconds timer.
+    // Check out Violet Tragan (Item 8526, Spell 6727).
+    // There are comments from vanilla saying it does
+    // damage every 5 seconds, while TBC comments say
+    // it does no damage, so behavior changed then.
+    // In classic the spell was edited in 1.13.6 and
+    // the timer was set to 5000, as it didn't work before.
+    for (int i = EFFECT_INDEX_0; i <= EFFECT_INDEX_2; ++i)
+    {
+        switch (spell->EffectApplyAuraName[i])
+        {
+        case SPELL_AURA_PERIODIC_DAMAGE:
+        case SPELL_AURA_PERIODIC_HEAL:
+        case SPELL_AURA_PERIODIC_TRIGGER_SPELL:
+        case SPELL_AURA_PERIODIC_ENERGIZE:
+        case SPELL_AURA_PERIODIC_LEECH:
+        case SPELL_AURA_PERIODIC_HEALTH_FUNNEL:
+        case SPELL_AURA_PERIODIC_MANA_FUNNEL:
+        case SPELL_AURA_PERIODIC_MANA_LEECH:
+        case SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
+        case SPELL_AURA_POWER_BURN_MANA:
+            if (spell->EffectAmplitude[i] == 0)
+                spell->EffectAmplitude[i] = 5000;
+            break;
+        }
+    }
+
+    // Attribute replaced with aura state in patch 1.8.
+    if (spell->HasAttribute(SPELL_ATTR_EX2_ENABLE_AFTER_PARRY))
+        spell->CasterAuraState = spell->SpellFamilyName == SPELLFAMILY_HUNTER ? AURA_STATE_HUNTER_PARRY : AURA_STATE_DEFENSE;
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_10_2
+    for (int i = EFFECT_INDEX_0; i <= EFFECT_INDEX_2; ++i)
+    {
+        if (IsEffectAppliesAura(spell->Effect[i]))
+        {
+            switch (spell->EffectApplyAuraName[i])
+            {
+                // Before 1.11, the spell data specifies TO what percent the speed is reduced, not BY what percent.
+            case SPELL_AURA_MOD_DECREASE_SPEED:
+            {
+                spell->EffectBasePoints[i] = -(100 - spell->EffectBasePoints[i]);
+                break;
+            }
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_8_4
+            // Before 1.9, the creature family is not a mask.
+            case SPELL_AURA_MOD_DAMAGE_DONE_CREATURE:
+            {
+                spell->EffectMiscValue[i] = 1 << (spell->EffectMiscValue[i] - 1);
+                break;
+            }
+            // Before 1.9, value 0 means all schools.
+            case SPELL_AURA_MOD_THREAT:
+            {
+                if (spell->EffectMiscValue[i] == 0)
+                    spell->EffectMiscValue[i] = 127;
+                break;
+            }
+            // Before 1.9, the school is not a mask.
+            case SPELL_AURA_MOD_DAMAGE_DONE:
+            case SPELL_AURA_MOD_DAMAGE_TAKEN:
+            case SPELL_AURA_MOD_RESISTANCE:
+            case SPELL_AURA_SCHOOL_IMMUNITY:
+            case SPELL_AURA_DAMAGE_IMMUNITY:
+            case SPELL_AURA_SCHOOL_ABSORB:
+            case SPELL_AURA_MOD_SPELL_CRIT_CHANCE_SCHOOL:
+            case SPELL_AURA_MOD_POWER_COST_SCHOOL_PCT:
+            case SPELL_AURA_MOD_POWER_COST_SCHOOL:
+            case SPELL_AURA_REFLECT_SPELLS_SCHOOL:
+            case SPELL_AURA_MOD_DAMAGE_PERCENT_DONE:
+            case SPELL_AURA_SPLIT_DAMAGE_PCT:
+            case SPELL_AURA_MOD_BASE_RESISTANCE:
+            case SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN:
+            case SPELL_AURA_MOD_RESISTANCE_PCT:
+            case SPELL_AURA_MOD_RANGED_DAMAGE_TAKEN:
+            case SPELL_AURA_MOD_HEALING:
+            case SPELL_AURA_MOD_HEALING_PCT:
+            case SPELL_AURA_MOD_HEALING_DONE:
+            case SPELL_AURA_MOD_HEALING_DONE_PERCENT:
+            case SPELL_AURA_MOD_BASE_RESISTANCE_PCT:
+            case SPELL_AURA_MOD_RESISTANCE_EXCLUSIVE:
+            case SPELL_AURA_SPLIT_DAMAGE_FLAT:
+            {
+                if (spell->EffectMiscValue[i] == -2)
+                    spell->EffectMiscValue[i] = 127; // all schools
+                else if (spell->EffectMiscValue[i] == -1)
+                    spell->EffectMiscValue[i] = 126; // all magic schools
+                else
+                    spell->EffectMiscValue[i] = 1 << spell->EffectMiscValue[i];
+                break;
+            }
+#endif
+            }
+        }
+    }
+#endif
+
+    // Before 1.10, the spell proc flags had completely different meanings.
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+    spell->procFlags = ReplaceOldSpellProcFlags(spell->procFlags);
+#endif
 }

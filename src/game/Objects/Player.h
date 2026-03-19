@@ -374,7 +374,9 @@ enum PlayerFieldBytes2Offsets
 // used in (PLAYER_FIELD_BYTES, 0) byte values
 enum PlayerFieldByteFlags
 {
+    PLAYER_FIELD_BYTE_CONTROLLING_PET   = 0x01,
     PLAYER_FIELD_BYTE_TRACK_STEALTHED   = 0x02,
+    PLAYER_FIELD_BYTE_LOGGING_OUT       = 0x04,
     PLAYER_FIELD_BYTE_RELEASE_TIMER     = 0x08,             // Display time till auto release spirit
     PLAYER_FIELD_BYTE_NO_RELEASE_WINDOW = 0x10              // Display no "release spirit" window at all
 };
@@ -536,7 +538,7 @@ enum BuyBackSlots                                           // 12 slots after 1.
 #endif
 };
 
-enum KeyRingSlots                                           // 32 slots
+enum KeyRingSlots                                           // 32 slots (only 16 are visible/accessible in UI)
 {
     KEYRING_SLOT_START          = 81,
     KEYRING_SLOT_END            = 97
@@ -736,6 +738,14 @@ struct ScheduledTeleportData
     std::function<void()> recover = std::function<void()>();
 };
 
+struct QuestShareInfo
+{
+    explicit QuestShareInfo(ObjectGuid guid, uint32 questId) : PlayerGuid(guid), QuestId(questId) {}
+
+    ObjectGuid PlayerGuid;
+    uint32 QuestId;
+};
+
 class Player final: public Unit
 {
     friend class WorldSession;
@@ -885,6 +895,7 @@ class Player final: public Unit
         Item* GetWeaponForAttack(WeaponAttackType attackType) const { return GetWeaponForAttack(attackType,false,false); }
         Item* GetWeaponForAttack(WeaponAttackType attackType, bool nonbroken, bool useable) const;
         Item* GetWeaponForParry() const;
+        bool CanBeDisarmed() const final;
         static uint32 GetAttackBySlot(uint8 slot);        // MAX_ATTACK if not weapon slot
         uint32 GetHighestKnownArmorProficiency() const;
         std::vector<Item*>& GetItemUpdateQueue() { return m_itemUpdateQueue; }
@@ -970,14 +981,21 @@ class Player final: public Unit
 #endif
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
-        uint32 GetMaxKeyringSize() const { return GetLevel() < 40 ? 4 : (GetLevel() < 50 ? 8 : 12); }
+        uint32 GetMaxKeyringSize() const
+        {
+            uint32 level = GetLevel();
+            if (level > 60) return 16;
+            if (level >= 50) return 12;
+            if (level >= 40) return 8;
+            return 4;
+        }
 #else
         uint32 GetMaxKeyringSize() const { return 0; }
 #endif
         void SendEquipError(InventoryResult msg, Item const* pItem, Item const* pItem2 = nullptr, uint32 itemid = 0) const;
         void SendBuyError(BuyResult msg, Creature const* pCreature, uint32 item, uint32 param) const;
         void SendSellError(SellResult msg, Creature const* pCreature, ObjectGuid itemGuid, uint32 param) const;
-        void SendOpenContainer() const;
+        void SendOpenContainer(ObjectGuid itemGuid) const;
         void AddWeaponProficiency(uint32 newflag) { m_weaponProficiency |= newflag; }
         void AddArmorProficiency(uint32 newflag) { m_armorProficiency |= newflag; }
         uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
@@ -1062,18 +1080,19 @@ class Player final: public Unit
         typedef std::set<uint32> QuestSet;
         QuestSet m_timedquests;
 
-        ObjectGuid m_dividerGuid;
+        nonstd::optional<QuestShareInfo> m_questShareInfo;
+
         uint32 m_ingametime;
         QuestStatusMap mQuestStatus;
         void AdjustQuestReqItemCount(Quest const* pQuest, QuestStatusData& questStatusData);
         bool CanGiveQuestSourceItemIfNeed(Quest const* pQuest, ItemPosCountVec* dest = nullptr) const;
         void GiveQuestSourceItemIfNeed(Quest const* pQuest);
 
-        uint16 FindQuestSlot(uint32 quest_id) const;
+        uint16 FindQuestSlot(uint32 questId) const;
         uint32 GetQuestSlotQuestId(uint16 slot) const { return GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET); }
-        void SetQuestSlot(uint16 slot, uint32 quest_id, uint32 timer = 0)
+        void SetQuestSlot(uint16 slot, uint32 questId, uint32 timer = 0)
         {
-            SetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot*MAX_QUEST_OFFSET + QUEST_ID_OFFSET, quest_id);
+            SetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot*MAX_QUEST_OFFSET + QUEST_ID_OFFSET, questId);
             SetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot*MAX_QUEST_OFFSET + QUEST_COUNT_STATE_OFFSET, 0);
             SetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot*MAX_QUEST_OFFSET + QUEST_TIME_OFFSET, timer);
         }
@@ -1091,24 +1110,24 @@ class Player final: public Unit
         uint32 GetQuestLevelForPlayer(Quest const* pQuest) const { return pQuest && (pQuest->GetQuestLevel() > 0) ? pQuest->GetQuestLevel() : GetLevel(); }
         void PrepareQuestMenu(ObjectGuid guid, uint32 exceptQuestId = 0);
         void SendPreparedQuest(ObjectGuid guid);
-        bool IsActiveQuest(uint32 quest_id) const;        // can be taken or taken
-        bool IsCurrentQuest(uint32 quest_id, uint8 completedOrNot = 0) const;
+        bool IsActiveQuest(uint32 questId) const;        // can be taken or taken
+        bool IsCurrentQuest(uint32 questId, uint8 completedOrNot = 0) const;
         Quest const* GetNextQuest(ObjectGuid guid, Quest const* pQuest);
         bool CanSeeStartQuest(Quest const* pQuest) const;
         bool CanTakeQuest(Quest const* pQuest, bool msg, bool skipStatusCheck = false) const;
         bool CanAddQuest(Quest const* pQuest, bool msg) const;
-        bool CanCompleteQuest(uint32 quest_id) const;
+        bool CanCompleteQuest(uint32 questId) const;
         bool CanCompleteRepeatableQuest(Quest const* pQuest) const;
         bool CanRewardQuest(Quest const* pQuest, bool msg) const;
         bool CanRewardQuest(Quest const* pQuest, uint32 reward, bool msg) const;
         void AddQuest(Quest const* pQuest, Object* questGiver);
         void FullQuestComplete(uint32 questId); // Equivalent to .quest complete
-        void CompleteQuest(uint32 quest_id);
-        void RemoveQuest(uint32 quest_id);
+        void CompleteQuest(uint32 questId);
+        void RemoveQuest(uint32 questId);
         void RemoveQuestAtSlot(uint32 slot);
-        void IncompleteQuest(uint32 quest_id);
+        void IncompleteQuest(uint32 questId);
         void RewardQuest(Quest const* pQuest, uint32 reward, WorldObject* questGiver, bool announce = true);
-        void FailQuest(uint32 quest_id);
+        void FailQuest(uint32 questId);
         bool SatisfyQuestSkill(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestCondition(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestLevel(Quest const* qInfo, bool msg) const;
@@ -1124,11 +1143,11 @@ class Player final: public Unit
         bool SatisfyQuestExclusiveGroup(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestNextChain(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestPrevChain(Quest const* qInfo, bool msg) const;
-        bool TakeOrReplaceQuestStartItems(uint32 quest_id, bool msg, bool giveQuestStartItem);
-        bool GetQuestRewardStatus(uint32 quest_id) const;
-        QuestStatusData const* GetQuestStatusData(uint32 quest_id) const;
-        QuestStatus GetQuestStatus(uint32 quest_id) const;
-        void SetQuestStatus(uint32 quest_id, QuestStatus status);
+        bool TakeOrReplaceQuestStartItems(uint32 questId, bool msg, bool giveQuestStartItem);
+        bool GetQuestRewardStatus(uint32 questId) const;
+        QuestStatusData const* GetQuestStatusData(uint32 questId) const;
+        QuestStatus GetQuestStatus(uint32 questId) const;
+        void SetQuestStatus(uint32 questId, QuestStatus status);
 
         void SwapQuestSlot(uint16 slot1,uint16 slot2)
         {
@@ -1160,29 +1179,29 @@ class Player final: public Unit
         bool HasQuestForItem(uint32 itemid) const;
         bool HasQuestForGO(int32 GOId) const;
         void UpdateForQuestWorldObjects();
-        bool CanShareQuest(uint32 quest_id) const;
-        QuestStatusMap& getQuestStatusMap() { return mQuestStatus; };
+        bool CanShareQuest(uint32 questId) const;
+        QuestStatusMap& GetQuestStatusMap() { return mQuestStatus; };
 
-        void SendQuestCompleteEvent(uint32 quest_id) const;
+        void SendQuestCompleteEvent(uint32 questId) const;
         void SendQuestReward(Quest const* pQuest, uint32 XP) const;
-        void SendQuestFailed(uint32 quest_id) const;
-        void SendQuestFailedAtTaker(uint32 quest_id, uint32 reason = INVALIDREASON_DONT_HAVE_REQ) const;
-        void SendQuestTimerFailed(uint32 quest_id) const;
+        void SendQuestFailed(uint32 questId) const;
+        void SendQuestFailedAtTaker(uint32 questId, uint32 reason = INVALIDREASON_DONT_HAVE_REQ) const;
+        void SendQuestTimerFailed(uint32 questId) const;
         void SendCanTakeQuestResponse(uint32 msg) const;
         void SendQuestConfirmAccept(Quest const* pQuest, Player const* pReceiver) const;
         void SendPushToPartyResponse(Player const* pPlayer, uint8 msg) const;
         void SendQuestUpdateAddItem(Quest const* pQuest, uint32 item_idx, uint32 current, uint32 count);
         void SendQuestUpdateAddCreatureOrGo(Quest const* pQuest, ObjectGuid guid, uint32 creatureOrGO_idx, uint32 count);
 
-        ObjectGuid GetDividerGuid() const { return m_dividerGuid; }
-        void SetDividerGuid(ObjectGuid guid) { m_dividerGuid = guid; }
-        void ClearDividerGuid() { m_dividerGuid.Clear(); }
+        auto const& GetQuestShareInfo() const { return m_questShareInfo; }
+        void SetQuestShareInfo(ObjectGuid guid, uint32 questId) { m_questShareInfo.emplace(guid, questId); }
+        void ClearQuestShareInfo() { m_questShareInfo.reset(); }
 
         uint32 GetInGameTime() const { return m_ingametime; }
         void SetInGameTime(uint32 time) { m_ingametime = time; }
 
-        void AddTimedQuest(uint32 quest_id) { m_timedquests.insert(quest_id); }
-        void RemoveTimedQuest(uint32 quest_id) { m_timedquests.erase(quest_id); }
+        void AddTimedQuest(uint32 questId) { m_timedquests.insert(questId); }
+        void RemoveTimedQuest(uint32 questId) { m_timedquests.erase(questId); }
 
         /*********************************************************/
         /***                   LOAD SYSTEM                     ***/
@@ -1220,7 +1239,8 @@ class Player final: public Unit
         bool HasCharacterFlag(CharacterFlags f) const { return m_characterFlags & f; }
         void SetCharacterFlag(CharacterFlags f, bool enabled) { if (enabled) m_characterFlags |= f; else m_characterFlags &= ~f; }
         void UpdateCharacterFlags();
-        static bool ValidateAppearance(uint8 race, uint8 class_, uint8 gender, uint8 hairID, uint8 hairColor, uint8 faceID, uint8 facialHair, uint8 skinColor, bool create = false);
+        static bool ValidateAppearance(uint8 race, uint8 gender, uint8 hairID, uint8 hairColor, uint8 faceID, uint8 facialHair, uint8 skinColor);
+        static void SelectRandomAppearance(uint8 race, uint8 gender, uint8& hairID, uint8& hairColor, uint8& faceID, uint8& facialHair, uint8& skinColor);
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -1480,6 +1500,7 @@ class Player final: public Unit
         bool CanDualWield() const { return m_canDualWield; }
         void SetCanDualWield(bool value) { m_canDualWield = value; }
 
+        void UpdateDamageDonePercent(uint32 school);
         void ApplyStatBuffMod(Stats stat, float val, bool apply) { ApplyModSignedFloatValue((val > 0 ? PLAYER_FIELD_POSSTAT0 + stat : PLAYER_FIELD_NEGSTAT0 + stat), val, apply); }
         void ApplyStatPercentBuffMod(Stats stat, float val, bool apply)
         {
@@ -1509,7 +1530,6 @@ class Player final: public Unit
         void ApplyItemEquipSpell(Item* item, bool apply, bool formChange = false);
         void ApplyEquipSpell(SpellEntry const* spellInfo, Item* item, bool apply, bool formChange = false);
         void UpdateEquipSpellsAtFormChange();
-        void outDebugStatsValues() const;
 
         /*********************************************************/
         /***                   SKILLS SYSTEM                   ***/
@@ -1739,7 +1759,7 @@ class Player final: public Unit
         bool IsVisibleGloballyFor(Player const* viewer) const;
         void UpdateVisibilityOf(WorldObject const* viewPoint, WorldObject* target);
         template<class T>
-        void UpdateVisibilityOf(WorldObject const* viewPoint, T* target, UpdateData& data, std::set<WorldObject*>& visibleNow);
+        void UpdateVisibilityOf(WorldObject const* viewPoint, T* target, UpdateData& data);
         void LeaveCombatWithFarAwayCreatures();
 
         Camera& GetCamera() { return m_camera; }
@@ -1833,7 +1853,6 @@ class Player final: public Unit
         bool IsUnderwater() const override { return (m_environmentFlags & ENVIRONMENT_FLAG_UNDERWATER); }
         bool IsInWater() const override { return (m_environmentFlags & ENVIRONMENT_FLAG_IN_WATER); }
         inline bool IsInMagma() const { return (m_environmentFlags & ENVIRONMENT_FLAG_IN_MAGMA); }
-        inline bool IsInSlime() const { return (m_environmentFlags & ENVIRONMENT_FLAG_IN_SLIME); }
         inline bool IsInHighSea() const { return (m_environmentFlags & ENVIRONMENT_FLAG_HIGH_SEA); }
         inline bool IsInHighLiquid() const { return (m_environmentFlags & ENVIRONMENT_FLAG_HIGH_LIQUID); }
 
@@ -2005,7 +2024,7 @@ class Player final: public Unit
         void SendDismountResult(UnitDismountResult result) const;
         void UpdateCorpseReclaimDelay();
     public:
-        void ScheduleStandUp();
+        void ScheduleStandUp() { m_isStandUpScheduled = true; }
         bool IsStandUpScheduled() const { return m_isStandUpScheduled; }
         void ClearScheduledStandUp() { m_isStandUpScheduled = false; }
         UnitMountResult Mount(uint32 mount, uint32 spellId = 0) override;
@@ -2063,6 +2082,8 @@ class Player final: public Unit
         void ResurrectPlayer(float restore_percent, bool applySickness = false);
         void BuildPlayerRepop();
         void RepopAtGraveyard();
+        void ApplyGhostForm();
+        void RemoveGhostForm();
         void ScheduleRepopAtGraveyard();
 
         // Nostalrius : Phasing

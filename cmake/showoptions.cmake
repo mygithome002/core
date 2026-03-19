@@ -18,7 +18,6 @@ else()
   message(STATUS "PGO profile           : Disabled")
 endif()
 
-message(STATUS "Memory allocation     : ${ALLOC_LIB_INFO_STRING} ${TBB_LIBRARIES}")
 message(STATUS "Detected compiler     : ${CMAKE_CXX_COMPILER_ID}")
 
 if(BUILD_FOR_HOST_CPU)
@@ -39,6 +38,12 @@ if(ENABLE_MAILSENDER)
   message(STATUS "Mailsender enabled    : Yes")
 else()
   message(STATUS "Mailsender enabled    : No (default)")
+endif()
+
+if(ENABLE_CPPTRACE)
+  message(STATUS "Cpptrace enabled      : Yes (default)")
+else()
+  message(STATUS "Cpptrace enabled      : No")
 endif()
 
 if(UNIX)

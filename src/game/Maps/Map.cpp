@@ -86,7 +86,7 @@ Map::~Map()
 
 GenericTransport* Map::GetTransport(ObjectGuid guid)
 {
-    if (Transport* transport = HashMapHolder<Transport>::Find(guid))
+    if (ShipTransport* transport = HashMapHolder<ShipTransport>::Find(guid))
         return transport;
 
     if (guid.GetEntry())
@@ -111,7 +111,7 @@ ElevatorTransport* Map::GetElevatorTransport(ObjectGuid guid)
 
 void Map::LoadMapAndVMap(int gx, int gy)
 {
-    if (m_bLoadedGrids[gx][gx])
+    if (m_bLoadedGrids[gx][gy])
         return;
 
     GridMap * pInfo = m_terrainData->Load(gx, gy);
@@ -161,17 +161,18 @@ Map::Map(uint32 id, time_t expiry, uint32 InstanceId)
         int numObjThreads = (int)sWorld.getConfig(CONFIG_UINT32_MAP_OBJECTSUPDATE_THREADS);
         if (numObjThreads > 1)
         {
-            m_objectThreads.reset(new ThreadPool(numObjThreads -1));
+            m_objectThreads.reset(new ThreadPool("MapObj", numObjThreads -1));
             m_objectThreads->start<ThreadPool::MySQL<ThreadPool::MultiQueue>>();
         }
-        m_motionThreads.reset(new ThreadPool(sWorld.getConfig(CONFIG_UINT32_CONTINENTS_MOTIONUPDATE_THREADS)));
-        m_visibilityThreads.reset(new ThreadPool(std::max((int)sWorld.getConfig(CONFIG_UINT32_MAP_VISIBILITYUPDATE_THREADS) -1,0)));
-        m_cellThreads.reset(new ThreadPool(std::max((int)sWorld.getConfig(CONFIG_UINT32_MTCELLS_THREADS) - 1, 0)));
+        m_motionThreads.reset(new ThreadPool("MapMotion", sWorld.getConfig(CONFIG_UINT32_CONTINENTS_MOTIONUPDATE_THREADS)));
+        m_visibilityThreads.reset(new ThreadPool("MapVis", std::max((int)sWorld.getConfig(CONFIG_UINT32_MAP_VISIBILITYUPDATE_THREADS) -1,0)));
+        m_cellThreads.reset(new ThreadPool("MapCell", std::max((int)sWorld.getConfig(CONFIG_UINT32_MTCELLS_THREADS) - 1, 0)));
         m_visibilityThreads->start<ThreadPool::MySQL<ThreadPool::MultiQueue>>();
         m_cellThreads->start();
         m_motionThreads->start();
     }
 
+    sTransportMgr.SpawnTransportsOnMap(this);
     LoadElevatorTransports();
 }
 
@@ -493,7 +494,7 @@ Map::Add(T* obj)
     obj->SetMap(this);
 
     Cell cell(p);
-    if (obj->isActiveObject() && !IsUnloading())
+    if (obj->IsActiveObject() && !IsUnloading())
         EnsureGridLoadedAtEnter(cell);
     else
         EnsureGridCreated(GridPair(cell.GridX(), cell.GridY()));
@@ -504,7 +505,7 @@ Map::Add(T* obj)
     AddToGrid(obj, grid, cell);
     obj->AddToWorld();
 
-    if (obj->isActiveObject() && !IsUnloading())
+    if (obj->IsActiveObject() && !IsUnloading())
         AddToActive(obj);
 
     sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "%s enters grid[%u,%u]", obj->GetObjectGuid().GetString().c_str(), cell.GridX(), cell.GridY());
@@ -550,7 +551,7 @@ void Map::Add(GenericTransport* obj)
 }
 
 template<>
-void Map::Add(Transport* obj)
+void Map::Add(ShipTransport* obj)
 {
     Add<GenericTransport>(obj);
 }
@@ -1299,7 +1300,7 @@ Map::Remove(T* obj, bool remove)
     m_mCreatureSummonCount.erase(obj->GetGUID());
     m_mCreatureSummonLimit.erase(obj->GetGUID());
 
-    if (obj->isActiveObject())
+    if (obj->IsActiveObject())
         RemoveFromActive(obj);
 
     if (remove)
@@ -1325,7 +1326,7 @@ Map::Remove(T* obj, bool remove)
 template<>
 void Map::Remove(GenericTransport* obj, bool remove)
 {
-    if (obj->isActiveObject())
+    if (obj->IsActiveObject())
         RemoveFromActive(obj);
     if (remove)
         obj->CleanupsBeforeDelete();
@@ -1359,7 +1360,7 @@ void Map::Remove(GenericTransport* obj, bool remove)
 }
 
 template<>
-void Map::Remove(Transport* obj, bool remove)
+void Map::Remove(ShipTransport* obj, bool remove)
 {
     Remove<GenericTransport>(obj, remove);
 }
@@ -1483,7 +1484,7 @@ bool Map::CreatureCellRelocation(Creature* c, Cell const& new_cell)
     Cell const& old_cell = c->GetCurrentCell();
     if (old_cell.DiffGrid(new_cell))
     {
-        if ((!c->isActiveObject() || IsUnloading()) && !loaded(new_cell.gridPair()))
+        if ((!c->IsActiveObject() || IsUnloading()) && !loaded(new_cell.gridPair()))
         {
             DEBUG_FILTER_LOG(LOG_FILTER_CREATURE_MOVES, "Creature (GUID: %u Entry: %u) attempt move from grid[%u,%u]cell[%u,%u] to unloaded grid[%u,%u]cell[%u,%u].", c->GetGUIDLow(), c->GetEntry(), old_cell.GridX(), old_cell.GridY(), old_cell.CellX(), old_cell.CellY(), new_cell.GridX(), new_cell.GridY(), new_cell.CellX(), new_cell.CellY());
             return false;
@@ -1648,9 +1649,8 @@ void Map::UpdateActiveObjectVisibility(Player* player)
     // Params for compressed data set - will only be compressed if packet size > 100 (multiple units)
     ObjectGuidSet guids;
     UpdateData data;
-    std::set<WorldObject*> visibleNow;
 
-    UpdateActiveObjectVisibility(player, guids, data, visibleNow);
+    UpdateActiveObjectVisibility(player, guids, data);
 
     if (data.HasData())
         data.Send(player->GetSession());
@@ -1670,14 +1670,14 @@ void Map::UpdateActiveObjectVisibility(Player* player, ObjectGuidSet& visibleGui
 }
 
 // Support for compressed data packet
-void Map::UpdateActiveObjectVisibility(Player* player, ObjectGuidSet& visibleGuids, UpdateData& data, std::set<WorldObject*>& visibleNow)
+void Map::UpdateActiveObjectVisibility(Player* player, ObjectGuidSet& visibleGuids, UpdateData& data)
 {
     for (const auto obj : m_activeNonPlayers)
     {
         if (obj->IsInWorld())
         {
             // TODO: Why is this templated? Why not just base class WorldObject for the target...?
-            player->UpdateVisibilityOf(player->GetCamera().GetBody(), obj, data, visibleNow);
+            player->UpdateVisibilityOf(player->GetCamera().GetBody(), obj, data);
             visibleGuids.erase(obj->GetObjectGuid());
         }
     }
@@ -3406,8 +3406,13 @@ GameObjectModel const* Map::FindDynamicObjectCollisionModel(float x1, float y1, 
     ASSERT(MaNGOS::IsValidMapCoord(x2, y2, z2));
     Vector3 const pos1 = Vector3(x1, y1, z1);
     Vector3 const pos2 = Vector3(x2, y2, z2);
-    std::shared_lock<std::shared_timed_mutex> lock(m_dynamicTreeLock);
-    return m_dynamicTree.getObjectHit(pos1, pos2);
+    GameObjectModel const* result = nullptr;
+    if (pos1 != pos2)
+    {
+        std::shared_lock<std::shared_timed_mutex> lock(m_dynamicTreeLock);
+        result = m_dynamicTree.getObjectHit(pos1, pos2);
+    }
+    return result;
 }
 
 void Map::RemoveGameObjectModel(const GameObjectModel &model)

@@ -672,14 +672,8 @@ struct npc_BalindaAI : public ScriptedAI
                 ThreatList const& tList = m_creature->GetThreatManager().getThreatList();
                 for (const auto i : tList)
                 {
-                    if (ObjectGuid uiTargetGuid = i->getUnitGuid())
-                    {
-                        if (Unit* pTarget = m_creature->GetMap()->GetUnit(uiTargetGuid))
-                        {
-                            if (m_creature->IsWithinDistInMap(pTarget, 6.0f))
-                                uiTargetInRangeCount++;
-                        }
-                    }
+                    if (m_creature->IsWithinDistInMap(i->getTarget(), 6.0f))
+                        uiTargetInRangeCount++;
                 }
                 if (urand(0, 1000) > (1000 * (3 / (uiTargetInRangeCount + 1))))
                 {
@@ -920,14 +914,8 @@ struct npc_GalvangarAI : public ScriptedAI
                 ThreatList const& tList = m_creature->GetThreatManager().getThreatList();
                 for (const auto i : tList)
                 {
-                    if (ObjectGuid uiTargetGuid = i->getUnitGuid())
-                    {
-                        if (Unit* pTarget = m_creature->GetMap()->GetUnit(uiTargetGuid))
-                        {
-                            if (m_creature->IsWithinDistInMap(pTarget, 6.0f))
-                                uiTargetInRangeCount++;
-                        }
-                    }
+                    if (m_creature->IsWithinDistInMap(i->getTarget(), 6.0f))
+                        uiTargetInRangeCount++;
                 }
                 if (urand(0, 1000) > (1000 * (3 / (uiTargetInRangeCount + 1))))
                 {
@@ -5131,6 +5119,9 @@ struct AV_mineNpcAI : public ScriptedAI
 
 CreatureAI* GetAI_AV_Mines_AI(Creature* pCreature)
 {
+    if (pCreature->GetMapId() != MAP_ALTERAC_VALLEY)
+        return new BasicAI(pCreature);
+
     return new AV_mineNpcAI(pCreature);
 }
 

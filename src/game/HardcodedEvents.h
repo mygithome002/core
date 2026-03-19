@@ -182,20 +182,21 @@ struct ScourgeInvasionEvent : WorldEvent
 private:
     struct InvasionZone
     {
-        uint32 map;
-        uint32 zoneId;
-        uint32 remainingVar;
-        uint32 necroAmount;
+        uint32 map = 0;
+        uint32 zoneId = 0;
+        uint32 remainingVar = 0;
+        uint32 necroAmount = 0;
         ObjectGuid mouthGuid;
-        std::vector<Position> mouth;
+        Position mouthPos;
     };
 
     struct CityAttack
     {
-        uint32 map;
-        uint32 zoneId;
+        uint32 map = 0;
+        uint32 zoneId = 0;
         ObjectGuid pallidGuid;
-        std::vector<Position> pallid;
+        uint32 spawnLocationId = 0;
+        std::vector<Position> pallidPos;
     };
 
     bool invasion1Loaded;
@@ -216,8 +217,8 @@ private:
     void StartNewInvasionIfTime(uint32 timeVariable, uint32 zoneVariable);
     void StartNewCityAttackIfTime(uint32 timeVariable, uint32 zoneVariable);
     bool ResumeInvasion(uint32 zoneId);
-    bool SummonMouth(Map* pMap, InvasionZone* zone, Position position);
-    bool SummonPallid(Map* pMap, CityAttack* zone, Position position, uint32 spawnLoc);
+    bool SummonMouth(InvasionZone* zone);
+    bool SummonPallid(CityAttack* zone, uint32 spawnLocId);
 
     Map* GetMap(uint32 mapId, Position const& invZone);
     bool isValidZoneId(uint32 zoneId);
@@ -291,8 +292,8 @@ enum WarEffortEnums
     WAR_EFFORT_GONG_DURATION                = 10 * HOUR,    // gong lasts 10 hours after the first dong
     WAR_EFFORT_CH_ATTACK_TIME               = 4 * HOUR,     // 4h after gong bang, CH gets attacked
     WAR_EFFORT_FINAL_BATTLE_TIME            = 4 * HOUR,     // 4h after CH attack, final battle begins
-    WAR_EFFORT_TEXT_CRYSTALS                = -1000008,     // Crystals emerge from the ground...
-    WAR_EFFORT_TEXT_BATTLE_OVER             = -1780312,     // The Might of Kalimdor is victorious...
+    WAR_EFFORT_TEXT_CRYSTALS                = 11432,        // Crystals emerge from the ground...
+    WAR_EFFORT_TEXT_BATTLE_OVER             = 11649,        // The Might of Kalimdor is victorious...
     WAR_EFFORT_ASHI_REWARD                  = 0x01,
     WAR_EFFORT_ZORA_REWARD                  = 0x02,
     WAR_EFFORT_REGAL_REWARD                 = 0x04
