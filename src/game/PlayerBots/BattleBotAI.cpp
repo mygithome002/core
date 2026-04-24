@@ -233,7 +233,7 @@ float BattleBotAI::GetMaxAggroDistanceForMap() const
     BattleGround* bg = me->GetBattleGround();
     if (!bg || bg->GetTypeID() != BATTLEGROUND_AV)
         return 50.0f;
-    
+
     return 30.0f;
 }
 
@@ -471,6 +471,7 @@ void BattleBotAI::OnPacketReceived(WorldPacket const* packet)
     //printf("Bot received %s\n", LookupOpcodeName(packet->GetOpcode()));
     switch (packet->GetOpcode())
     {
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_4_2
         case MSG_PVP_LOG_DATA:
         {
             if (!me)
@@ -484,15 +485,16 @@ void BattleBotAI::OnPacketReceived(WorldPacket const* packet)
                     botEntry->requestRemoval = true;
                 else
                 {
-                    std::unique_ptr<WorldPacket> data = std::make_unique<WorldPacket>(CMSG_LEAVE_BATTLEFIELD);
+                    auto data = std::make_unique<WorldPackets::Battleground::LeaveBattlefield>();
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-                    *data << uint32(me->GetMapId());
+                    data->mapId = me->GetMapId();
 #endif
                     me->GetSession()->QueuePacket(std::move(data));
                 }
             }
             return;
         }
+#endif
     }
 
     CombatBotBaseAI::OnPacketReceived(packet);
@@ -534,7 +536,7 @@ void BattleBotAI::UpdateWaypointMovement()
             return;
 
     if (StartNewPathToObjective())
-        return; 
+        return;
 
     if (StartNewPathFromBeginning())
         return;
@@ -772,7 +774,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
             }
         }
     }
-    
+
     if (me->IsDead())
     {
         if (!m_wasDead)
@@ -781,7 +783,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
             OnJustDied();
             return;
         }
-        
+
         if (me->InBattleGround())
         {
             if (me->GetDeathState() == CORPSE)
@@ -799,7 +801,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
                 //me->SendCreateUpdateToPlayer(pLeader);
             }
         }
-        
+
         return;
     }
     else
@@ -813,7 +815,10 @@ void BattleBotAI::UpdateAI(uint32 const diff)
     }
 
     if (me->HasUnitState(UNIT_STATE_CAN_NOT_REACT_OR_LOST_CONTROL))
+    {
+        BreakCrowdControlEffects();
         return;
+    }
 
     if (me->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL))
     {
@@ -838,7 +843,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
         me->ClearTarget();
 
     Unit* pVictim = me->GetVictim();
-    
+
     // Prevent battelbot from chasing target entered stealth mode
     if (pVictim && !pVictim->IsVisibleForOrDetect(me, me, false))
     {
@@ -910,7 +915,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
 
             if (UseMount())
                 return;
-            
+
             UpdateWaypointMovement();
         }
         return;
@@ -923,7 +928,7 @@ void BattleBotAI::UpdateAI(uint32 const diff)
         return;
     }
 
-    if (!pVictim || !IsValidHostileTarget(pVictim) || 
+    if (!pVictim || !IsValidHostileTarget(pVictim) ||
         !pVictim->IsWithinDist(me, VISIBILITY_DISTANCE_SMALL))
     {
         if (Unit* pNewVictim = SelectAttackTarget(pVictim))
@@ -1299,7 +1304,7 @@ void BattleBotAI::UpdateOutOfCombatAI_Paladin()
                     m_isBuffing = true;
                     return;
                 }
-            }  
+            }
         }
     }
 
@@ -1333,7 +1338,7 @@ void BattleBotAI::UpdateInCombatAI_Paladin()
     {
         me->CastSpell(me, m_spells.paladin.pSeal, false);
     }
-    
+
     if (Unit* pVictim = me->GetVictim())
     {
         if (hasSeal && m_spells.paladin.pJudgement &&
@@ -1550,7 +1555,7 @@ void BattleBotAI::UpdateInCombatAI_Shaman()
             if (DoCastSpell(pVictim, m_spells.shaman.pFlameShock) == SPELL_CAST_OK)
                 return;
         }
-        
+
         if (m_spells.shaman.pLightningBolt &&
            !me->CanReachWithMeleeAutoAttack(pVictim) &&
             CanTryToCastSpell(pVictim, m_spells.shaman.pLightningBolt))
@@ -1920,7 +1925,7 @@ void BattleBotAI::UpdateInCombatAI_Mage()
         {
             if (DoCastSpell(me, m_spells.mage.pPresenceOfMind) == SPELL_CAST_OK)
                 return;
-        } 
+        }
 
         if (m_spells.mage.pScorch &&
            (pVictim->GetHealthPercent() < 20.0f) &&
@@ -3163,7 +3168,7 @@ void BattleBotAI::UpdateInCombatAI_Druid()
             me->HasAuraType(SPELL_AURA_MOD_SHAPESHIFT))
             me->RemoveSpellsCausingAura(SPELL_AURA_MOD_SHAPESHIFT);
     }
-    
+
     if (Unit* pVictim = me->GetVictim())
     {
         ShapeshiftForm const form = me->GetShapeshiftForm();
@@ -3267,7 +3272,7 @@ void BattleBotAI::UpdateInCombatAI_Druid()
                     if (DoCastSpell(pVictim, m_spells.druid.pClaw) == SPELL_CAST_OK)
                         return;
                 }
-                
+
                 break;
             }
             case FORM_BEAR:

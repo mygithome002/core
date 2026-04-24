@@ -102,7 +102,9 @@ if(WIN32)
   set(OPENSSL_LIBRARIES ${CMAKE_SOURCE_DIR}/dep/windows/lib/${DEP_ARCH}_release/libeay32.lib)
   set(OPENSSL_DEBUG_LIBRARIES ${CMAKE_SOURCE_DIR}/dep/windows/lib/${DEP_ARCH}_debug/libeay32.lib)
   set(ZLIB_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/dep/windows/include/zlib)
-  if (REQUIRES_LIBCURL)
+  if (REQUIRES_LIBCURL AND MSVC)
+    # MinGW falls through to find_package(CURL) below, which picks up
+    # libcurl from the toolchain environment (e.g., MSYS2).
     set(CURL_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/dep/windows/optional_dependencies/curl/include)
     set(CURL_LIBRARY     ${CMAKE_SOURCE_DIR}/dep/windows/optional_dependencies/curl/lib/libcurl.lib)
   endif()
@@ -283,6 +285,6 @@ message(STATUS "Build flags (DEBUG)   : ${CMAKE_CXX_FLAGS_DEBUG}")
 add_subdirectory(src)
 add_subdirectory(dep)
 
-if (USE_EXTRACTORS OR USE_REALMMERGE)
+if (BUILD_EXTRACTORS OR BUILD_REALMMERGE)
     add_subdirectory(contrib)
 endif()

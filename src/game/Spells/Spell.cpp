@@ -54,227 +54,6 @@ using namespace Spells;
 
 extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];
 
-SpellCastTargets::SpellCastTargets()
-{
-    m_unitTarget = nullptr;
-    m_itemTarget = nullptr;
-    m_GOTarget   = nullptr;
-
-    m_itemTargetEntry  = 0;
-
-    m_srcX = m_srcY = m_srcZ = m_destX = m_destY = m_destZ = 0.0f;
-    m_targetMask = 0;
-}
-
-SpellCastTargets::~SpellCastTargets()
-{
-}
-
-void SpellCastTargets::setUnitTarget(Unit* target)
-{
-    if (!target)
-        return;
-
-    m_destX = target->GetPositionX();
-    m_destY = target->GetPositionY();
-    m_destZ = target->GetPositionZ();
-    m_unitTarget = target;
-    m_unitTargetGUID = target->GetObjectGuid();
-    m_targetMask |= TARGET_FLAG_UNIT;
-}
-
-void SpellCastTargets::setDestination(float x, float y, float z)
-{
-    m_destX = x;
-    m_destY = y;
-    m_destZ = z;
-    m_targetMask |= TARGET_FLAG_DEST_LOCATION;
-}
-
-void SpellCastTargets::setSource(float x, float y, float z)
-{
-    m_srcX = x;
-    m_srcY = y;
-    m_srcZ = z;
-    m_targetMask |= TARGET_FLAG_SOURCE_LOCATION;
-}
-
-void SpellCastTargets::setGOTarget(GameObject* target)
-{
-    m_GOTarget = target;
-    m_GOTargetGUID = target->GetObjectGuid();
-    //    m_targetMask |= TARGET_FLAG_GAMEOBJECT;
-}
-
-void SpellCastTargets::setItemTarget(Item* item)
-{
-    if (!item)
-        return;
-
-    m_itemTarget = item;
-    m_itemTargetGUID = item->GetObjectGuid();
-    m_itemTargetEntry = item->GetEntry();
-    m_targetMask |= TARGET_FLAG_ITEM;
-}
-
-void SpellCastTargets::setTradeItemTarget(Player* caster)
-{
-    m_itemTargetGUID = ObjectGuid(uint64(TRADE_SLOT_NONTRADED));
-    m_itemTargetEntry = 0;
-    m_targetMask |= TARGET_FLAG_TRADE_ITEM;
-
-    Update(caster);
-}
-
-void SpellCastTargets::setCorpseTarget(Corpse* corpse)
-{
-    m_CorpseTargetGUID = corpse->GetObjectGuid();
-}
-
-void SpellCastTargets::Update(SpellCaster* pCaster)
-{
-    m_GOTarget   = m_GOTargetGUID ? pCaster->GetMap()->GetGameObject(m_GOTargetGUID) : nullptr;
-    m_unitTarget = m_unitTargetGUID ?
-                   (m_unitTargetGUID == pCaster->GetObjectGuid() ? pCaster->ToUnit() : ObjectAccessor::GetUnit(*pCaster, m_unitTargetGUID)) :
-                   nullptr;
-
-    m_itemTarget = nullptr;
-    if (Player* pPlayer = pCaster->ToPlayer())
-    {
-        if (m_targetMask & TARGET_FLAG_ITEM)
-            m_itemTarget = pPlayer->GetItemByGuid(m_itemTargetGUID);
-        else if (m_targetMask & TARGET_FLAG_TRADE_ITEM)
-        {
-            if (TradeData* pTrade = pPlayer->GetTradeData())
-                if (m_itemTargetGUID.GetRawValue() < TRADE_SLOT_COUNT)
-                    m_itemTarget = pTrade->GetTraderData()->GetItem(TradeSlots(m_itemTargetGUID.GetRawValue()));
-        }
-
-        if (m_itemTarget)
-            m_itemTargetEntry = m_itemTarget->GetEntry();
-    }
-}
-
-void SpellCastTargets::read(ByteBuffer& data, Unit* caster)
-{
-    data >> m_targetMask;
-
-    if (m_targetMask == TARGET_FLAG_SELF)
-    {
-        m_destX = caster->GetPositionX();
-        m_destY = caster->GetPositionY();
-        m_destZ = caster->GetPositionZ();
-        m_unitTarget = caster;
-        m_unitTargetGUID = caster->GetObjectGuid();
-        return;
-    }
-
-    // TARGET_FLAG_UNIT_MINIPET is used for non-combat pets, maybe other?
-    if (m_targetMask & (TARGET_FLAG_UNIT))
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        data >> m_unitTargetGUID.ReadAsPacked();
-#else
-        data >> m_unitTargetGUID;
-#endif
-
-    if (m_targetMask & (TARGET_FLAG_GAMEOBJECT))
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        data >> m_GOTargetGUID.ReadAsPacked();
-#else
-        data >> m_GOTargetGUID;
-#endif
-
-    if (m_targetMask & (TARGET_FLAG_CORPSE_ALLY | TARGET_FLAG_CORPSE_ENEMY))
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        data >> m_CorpseTargetGUID.ReadAsPacked();
-#else
-        data >> m_CorpseTargetGUID;
-#endif
-
-    if ((m_targetMask & (TARGET_FLAG_ITEM | TARGET_FLAG_TRADE_ITEM)) && caster->IsPlayer())
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        data >> m_itemTargetGUID.ReadAsPacked();
-#else
-        data >> m_itemTargetGUID;
-#endif
-
-    if (m_targetMask & TARGET_FLAG_SOURCE_LOCATION)
-    {
-        data >> m_srcX >> m_srcY >> m_srcZ;
-        if (!MaNGOS::IsValidMapCoord(m_srcX, m_srcY, m_srcZ))
-            throw ByteBufferException(false, data.rpos(), 0, data.size());
-    }
-
-    if (m_targetMask & TARGET_FLAG_DEST_LOCATION)
-    {
-        data >> m_destX >> m_destY >> m_destZ;
-        if (!MaNGOS::IsValidMapCoord(m_destX, m_destY, m_destZ))
-            throw ByteBufferException(false, data.rpos(), 0, data.size());
-    }
-
-    if (m_targetMask & TARGET_FLAG_STRING)
-        data >> m_strTarget;
-
-    // find real units/GOs
-    Update(caster);
-}
-
-void SpellCastTargets::write(ByteBuffer& data) const
-{
-    data << uint16(m_targetMask);
-
-    if (m_targetMask & (TARGET_FLAG_UNIT | TARGET_FLAG_CORPSE_ENEMY | TARGET_FLAG_GAMEOBJECT | TARGET_FLAG_CORPSE_ALLY))
-    {
-        if (m_targetMask & TARGET_FLAG_UNIT)
-        {
-            if (m_unitTarget)
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-                data << m_unitTarget->GetPackGUID();
-#else
-                data << m_unitTarget->GetGUID();
-#endif
-            else
-                data << uint8(0);
-        }
-        else if (m_targetMask & (TARGET_FLAG_GAMEOBJECT))
-        {
-            if (m_GOTarget)
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-                data << m_GOTarget->GetPackGUID();
-#else
-                data << m_GOTarget->GetGUID();
-#endif
-            else
-                data << uint8(0);
-        }
-        else if (m_targetMask & (TARGET_FLAG_CORPSE_ALLY | TARGET_FLAG_CORPSE_ENEMY))
-            data << m_CorpseTargetGUID.WriteAsPacked();
-        else
-            data << uint8(0);
-    }
-
-    if (m_targetMask & (TARGET_FLAG_ITEM | TARGET_FLAG_TRADE_ITEM))
-    {
-        if (m_itemTarget)
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-            data << m_itemTarget->GetPackGUID();
-#else
-            data << m_itemTarget->GetGUID();
-#endif
-        else
-            data << uint8(0);
-    }
-
-    if (m_targetMask & TARGET_FLAG_SOURCE_LOCATION)
-        data << m_srcX << m_srcY << m_srcZ;
-
-    if (m_targetMask & TARGET_FLAG_DEST_LOCATION)
-        data << m_destX << m_destY << m_destZ;
-
-    if (m_targetMask & TARGET_FLAG_STRING)
-        data << m_strTarget;
-}
-
 Spell::Spell(Unit* caster, SpellEntry const* info, bool triggered, ObjectGuid originalCasterGUID, SpellEntry const* triggeredBy, Unit* victim, SpellEntry const* triggeredByParent):
     m_spellInfo(info), m_triggeredBySpellInfo(triggeredBy), m_triggeredByParentSpellInfo(triggeredByParent), m_caster(caster), m_casterUnit(caster), m_IsTriggeredSpell(triggered)
 {
@@ -4622,7 +4401,7 @@ void Spell::SendCastResult(Player* caster, SpellEntry const* spellInfo, SpellCas
 
     if (result != SPELL_CAST_OK && !spellInfo->HasAttribute(SPELL_ATTR_EX2_DO_NOT_REPORT_SPELL_FAILURE))
     {
-        data << uint8(2); // status = fail
+        data << static_cast<uint8>(SPELL_RESULT_STATUS_FAIL);
         data << uint8(spellInfo->IsPassiveSpell() ? SPELL_FAILED_DONT_REPORT : result);                                  // problem
         switch (result)
         {
@@ -4652,7 +4431,9 @@ void Spell::SendCastResult(Player* caster, SpellEntry const* spellInfo, SpellCas
         }
     }
     else
-        data << uint8(0);
+    {
+        data << static_cast<uint8>(SPELL_RESULT_STATUS_OKAY);
+    }
 
     caster->GetSession()->SendPacket(&data);
 }
@@ -4683,8 +4464,8 @@ void Spell::SendSpellStart()
     if (m_spellInfo->IsRangedSpell())
         castFlags |= CAST_FLAG_AMMO;
 
-    // Youfie <Nostalrius> : Sandtrap : dans le combatlog il n'y a plus de debuff avant l'apparition du Sand trap
-    // Seul truc pas Blizz-like : c'est le joueur qui caste le sort, et pas Kurinaxx ; faudra fix dans le script de Kurinaxx quand le core sera debug pour le supporter
+    // Youfie <Nostalrius> : Sandtrap : no debuff in the combat log before the Sand trap appears
+    // Only non Blizz-like thing: the player casts the spell instead of Kurinaxx; needs to be fixed in the Kurinaxx script when the core supports it
     if (m_spellInfo->Id == 25648)
         castFlags = CAST_FLAG_HIDDEN_COMBATLOG;
 
@@ -5856,7 +5637,7 @@ SpellCastResult Spell::CheckCast(bool strict)
             }
             // TODO: this check can be applied and for player to prevent cheating when IsPositiveSpell will return always correct result.
             // check target for pet/charmed casts (not self targeted), self targeted cast used for area effects and etc
-            // Nostalrius : pas de status positif / negatif pour les sorts de dispel (marche en offensif comme defensif)
+            // Nostalrius : no positive/negative status for dispel spells (works both offensively and defensively)
             if (!explicit_target_mode && m_caster->IsCreature() && m_casterUnit->GetCharmerOrOwnerGuid() && !m_spellInfo->HasEffect(SPELL_EFFECT_DISPEL))
             {
                 // check correctness positive/negative cast target (pet cast real check and cheating check)
@@ -6415,7 +6196,7 @@ SpellCastResult Spell::CheckCast(bool strict)
         }
     }
 
-    if (m_spellInfo->IsNonPeriodicDispel() && !m_IsTriggeredSpell) // Buff Abolir le poison non concerne par exemple (Debuff a chaque tic)
+    if (m_spellInfo->IsNonPeriodicDispel() && !m_IsTriggeredSpell) // Abolish Poison buff not concerned for example (debuff on each tick)
     {
         uint32 dispelMask     = 0;
         bool bFoundOneDispell = false;
@@ -6981,8 +6762,8 @@ bool Spell::CanAutoCast(Unit* target)
 
     ObjectGuid targetguid = target->GetObjectGuid();
 
-    // Nostalrius - par exemple roder ne doit pas se declencher si on envoie le pet attaquer.
-    // Sinon le pet revient a cause de cet attribut :
+    // Nostalrius - e.g. prowl should not trigger if we send the pet to attack.
+    // Otherwise the pet returns because of this attribute:
     if (m_spellInfo->HasAttribute(SPELL_ATTR_CANCELS_AUTO_ATTACK_COMBAT) && m_casterUnit->GetVictim())
         return false;
 
@@ -8108,7 +7889,7 @@ SpellCastResult Spell::CanOpenLock(SpellEffectIndex effIndex, uint32 lockId, Ski
 
                 skillId = SkillByLockType(LockType(lockInfo->Index[j]));
 
-                if ((skillId != SKILL_NONE) || (LockType(lockInfo->Index[j]) == LOCKTYPE_BLASTING))    // Ustaag <Nostalrius> : ajout pour prise en compte des charges de Seaforium (item ingenieur)
+                if ((skillId != SKILL_NONE) || (LockType(lockInfo->Index[j]) == LOCKTYPE_BLASTING))    // Ustaag <Nostalrius> : added to account for Seaforium charges (engineering item)
                 {
                     // skill bonus provided by casting spell (mostly item spells)
                     // add the damage modifier from the spell casted (cheat lock / skeleton key etc.) (use m_currentBasePoints, CalculateDamage returns wrong value)

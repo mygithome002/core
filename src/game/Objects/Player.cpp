@@ -6403,13 +6403,14 @@ ReputationRank Player::GetReputationRank(uint32 faction) const
 }
 
 //Calculate total reputation percent player gain with quest/creature level
-int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 faction, uint32 creatureOrQuestLevel, bool noAuraBonus)
+int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 faction, uint32 creatureOrQuestLevel)
 {
     float percent = 100.0f;
 
-    float repMod = noAuraBonus ? 0.0f : (float)GetTotalAuraModifier(SPELL_AURA_MOD_REPUTATION_GAIN);
+    // Diplomacy racial does not affect rep loss. Tested on classic.
+    float repMod = rep < 0 ? 0.0f : (float)GetTotalAuraModifier(SPELL_AURA_MOD_REPUTATION_GAIN);
 
-    // faction specific auras only seem to apply to kills
+    // Faction specific auras only seem to apply to kills.
     if (source == REPUTATION_SOURCE_KILL)
         repMod += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_FACTION_REPUTATION_GAIN, faction);
 
@@ -6429,56 +6430,49 @@ int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 
     //      60                  5                   20 %
 
     float rate;
-    float diffLvlRate;
-    uint32 diffLvl = 0;
     switch (source)
     {
         case REPUTATION_SOURCE_KILL:
-            rate = sWorld.getConfig(CONFIG_FLOAT_RATE_REPUTATION_LOWLEVEL_KILL);
-            // Ustaag <Nostalrius> : a priori, deja gere ailleurs... deque le mob est gris, la reput est divisee par 5.
-            /*if (MaNGOS::XP::GetGrayLevel(GetLevel()) >= creatureOrQuestLevel)
-                diffLvl = MaNGOS::XP::GetGrayLevel(GetLevel()) - creatureOrQuestLevel;
-            else
-                diffLvl = 0;*/
+            // Rep loss is not affected by the mob being gray. Tested on classic.
+            rate = rep > 0  && creatureOrQuestLevel <= MaNGOS::XP::GetGrayLevel(GetLevel())
+                ? sWorld.getConfig(CONFIG_FLOAT_RATE_REPUTATION_LOWLEVEL_KILL) : 1.0f;
             break;
         case REPUTATION_SOURCE_QUEST:
-            rate = sWorld.getConfig(CONFIG_FLOAT_RATE_REPUTATION_LOWLEVEL_QUEST);
+        {
+            uint32 diffLvl = 0;
             if (GetLevel() >= creatureOrQuestLevel + 5)
                 diffLvl = GetLevel() - creatureOrQuestLevel - 5;
             else
                 diffLvl = 0;
+
+            switch (diffLvl)
+            {
+                case 0:
+                    rate = 1.0f;
+                    break;
+                case 1:
+                    rate = 0.8f;
+                    break;
+                case 2:
+                    rate = 0.6f;
+                    break;
+                case 3:
+                    rate = 0.4f;
+                    break;
+                default:
+                    rate = 0.2f;
+                    break;
+            }
+
             break;
+        }
         case REPUTATION_SOURCE_SPELL:
         default:
             rate = 1.0f;
             break;
     }
 
-    switch (diffLvl)
-    {
-        case 0:
-            diffLvlRate = 1.0f;
-            break;
-        case 1:
-            diffLvlRate = 0.8f;
-            break;
-        case 2:
-            diffLvlRate = 0.6f;
-            break;
-        case 3:
-            diffLvlRate = 0.4f;
-            break;
-        default:
-            diffLvlRate = 0.2f;
-            break;
-    }
-
-    // Ustaag <Nostalrius> : uniquement pour les quetes, cf. plus haut
-    if (source == REPUTATION_SOURCE_QUEST)
-        percent *= diffLvlRate;
-
-    if (rate != 1.0f && creatureOrQuestLevel <= MaNGOS::XP::GetGrayLevel(GetLevel()))
-        percent *= rate;
+    percent *= rate;
 
     if (percent <= 0.0f)
         return 0;
@@ -6794,7 +6788,7 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
     // on a ffa realm, ffa is toggled together with pvp flag
     if (sWorld.IsFFAPvPRealm())
         SetFFAPvP(IsPvP() && !IsGameMaster() && !HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING));
-	
+
     if ((zoneEntry->Flags & AREA_FLAG_CAPITAL) && !pvpInfo.inPvPEnforcedArea) // in capital city
         SetRestType(REST_TYPE_IN_CITY);
     else if (HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING) && GetRestType() != REST_TYPE_IN_TAVERN)
@@ -6848,24 +6842,22 @@ void Player::CheckDuelDistance(time_t currTime)
         inRange = false;
     if (m_duel->outOfBound == 0)
     {
-        // Nostalrius : modification de la distance de duel (50 -> 75m)
+        // Nostalrius : modified duel distance (50 -> 75m)
         if (!inRange)
         {
             m_duel->outOfBound = currTime;
 
-            WorldPacket data(SMSG_DUEL_OUTOFBOUNDS, 0);
-            GetSession()->SendPacket(&data);
+            GetSession()->SendPacket(std::make_unique<WorldPackets::Duel::DuelOutOfBounds>());
         }
     }
     else
     {
-        // Nostalrius : modification de la distance de duel
+        // Nostalrius : modified duel distance
         if (inRange)
         {
             m_duel->outOfBound = 0;
 
-            WorldPacket data(SMSG_DUEL_INBOUNDS, 0);
-            GetSession()->SendPacket(&data);
+            GetSession()->SendPacket(std::make_unique<WorldPackets::Duel::DuelInBounds>());
         }
         else if (currTime >= (m_duel->outOfBound + 10))
         {
@@ -7324,7 +7316,7 @@ void Player::ApplyItemEquipSpell(Item* item, bool apply, bool formChange)
         if (!spellproto)
             continue;
 
-        // Nostalrius : Ne pas dissiper ces sorts quand on desequipe / supprime le bijoux (pierre de sort)
+        // Nostalrius : Do not dispel these spells when unequipping / removing trinkets (spellstone)
         if (!apply && spellData.SpellTrigger == ITEM_SPELLTRIGGER_ON_USE)
             continue;
 
@@ -7541,6 +7533,7 @@ void Player::CastItemUseSpell(Item* item, SpellCastTargets const& targets)
         RemoveAurasWithInterruptFlags(AURA_INTERRUPT_ITEM_USE_CANCELS, 0, false, spellInfo->HasAttribute(SPELL_ATTR_EX_ALLOW_WHILE_STEALTHED));
 
         Spell* spell = new Spell(this, spellInfo, (count > 0));
+        spell->SetClientStarted(!IsBot());
         spell->SetCastItem(item);
         spell->prepare(targets);
 
@@ -7766,7 +7759,7 @@ void Player::SendLootError(ObjectGuid guid, LootError error) const
 
 void Player::SendLoot(ObjectGuid guid, LootType lootType, Player const* pVictim)
 {
-    // Nostalrius : desactivation des loots / map
+    // Nostalrius : loot disabled per map
     if (Map* myMap = FindMap())
     {
         if (sObjectMgr.IsMapLootDisabled(myMap->GetId()))
@@ -7906,6 +7899,7 @@ void Player::SendLoot(ObjectGuid guid, LootType lootType, Player const* pVictim)
             }
             break;
         }
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_4_2
         case HIGHGUID_CORPSE:                               // remove insignia
         {
             Corpse* bones = GetMap()->GetCorpse(guid);
@@ -7941,6 +7935,7 @@ void Player::SendLoot(ObjectGuid guid, LootType lootType, Player const* pVictim)
             bones->ForceValuesUpdateAtIndex(CORPSE_DYNFLAG_LOOTABLE);
             break;
         }
+#endif
         case HIGHGUID_UNIT:
         {
             Creature* creature = GetMap()->GetCreature(guid);
@@ -8155,15 +8150,14 @@ void Player::SendLoot(ObjectGuid guid, LootType lootType, Player const* pVictim)
 
 void Player::SendNotifyLootMoneyRemoved() const
 {
-    WorldPacket data(SMSG_LOOT_CLEAR_MONEY, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Loot::LootClearMoney>());
 }
 
 void Player::SendLootMoneyNotify(uint32 amount) const
 {
-    WorldPacket data(SMSG_LOOT_MONEY_NOTIFY, 4);
-    data << uint32(amount);
-    GetSession()->SendPacket(&data);
+    auto packet = std::make_unique<WorldPackets::Loot::LootMoneyNotify>();
+    packet->amount = amount;
+    GetSession()->SendPacket(std::move(packet));
 }
 
 void Player::SendNotifyLootItemRemoved(uint8 lootSlot) const
@@ -8415,12 +8409,12 @@ void Player::SetBindPoint(ObjectGuid guid) const
 #endif
 }
 
-void Player::SendTalentWipeConfirm(ObjectGuid guid) const
+void Player::SendTalentWipeConfirm(ObjectGuid trainerGuid) const
 {
-    WorldPacket data(MSG_TALENT_WIPE_CONFIRM, (8 + 4));
-    data << ObjectGuid(guid);
-    data << uint32(GetResetTalentsCost());
-    GetSession()->SendPacket(&data);
+    auto packet = std::make_unique<WorldPackets::Skill::TalentWipeConfirmResponse>();
+    packet->trainerGuid = trainerGuid;
+    packet->cost = GetResetTalentsCost();
+    GetSession()->SendPacket(std::move(packet));
 }
 
 void Player::SendPetSkillWipeConfirm() const
@@ -9811,7 +9805,7 @@ InventoryResult Player::CanEquipItem(uint8 slot, uint16& dest, ItemPrototype con
         if (not_loading)
         {
             // World of Warcraft Client Patch 1.6.0 (2005-07-12)
-            // - It will no longer be possible to swap any equipment while stunned. 
+            // - It will no longer be possible to swap any equipment while stunned.
             // May be here should be more stronger checks; STUNNED checked
             // ROOT, CONFUSED, DISTRACTED, FLEEING this needs to be checked.
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_5_1
@@ -12573,9 +12567,9 @@ void Player::SendPreparedQuest(ObjectGuid guid)
     // multiply entries
     else
     {
-        QEmote qe;
-        qe._Delay = 0;
-        qe._Emote = 0;
+        QuestNpcEmoteInfo qe;
+        qe.delay = 0;
+        qe.emote = 0;
         std::string title;
 
         // need pet case for some quests
@@ -12595,8 +12589,8 @@ void Player::SendPreparedQuest(ObjectGuid guid)
                 {
                     if (BroadcastText const* bct = sObjectMgr.GetBroadcastTextLocale(gossiptext->Options[0].BroadcastTextID))
                     {
-                        qe._Emote = bct->emoteId1;
-                        qe._Delay = bct->emoteDelay1;
+                        qe.emote = bct->emoteId1;
+                        qe.delay = bct->emoteDelay1;
                         int locIdx = GetSession()->GetSessionDbLocaleIndex();
                         title = bct->GetText(locIdx, pCreature->GetGender(), false);
                     }
@@ -13014,7 +13008,7 @@ void Player::AddQuest(Quest const* pQuest, Object* questGiver)
                 GetMap()->ScriptsStart(sQuestStartScripts, pQuest->GetQuestStartScript(), pQuestGiver->GetObjectGuid(), GetObjectGuid());
 
     }
-    
+
     // remove start item if not need
     if (questGiver && questGiver->IsType(TYPEMASK_ITEM))
     {
@@ -13460,8 +13454,7 @@ bool Player::SatisfyQuestLog(bool msg) const
 
     if (msg)
     {
-        WorldPacket data(SMSG_QUESTLOG_FULL, 0);
-        GetSession()->SendPacket(&data);
+        GetSession()->SendPacket(std::make_unique<WorldPackets::Quest::QuestLogFull>());
     }
     return false;
 }
@@ -14451,39 +14444,40 @@ void Player::SendQuestCompleteEvent(uint32 questId) const
 {
     if (questId)
     {
-        WorldPacket data(SMSG_QUESTUPDATE_COMPLETE, 4);
-        data << uint32(questId);
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestUpdateComplete>();
+        packet->questId = questId;
+        GetSession()->SendPacket(std::move(packet));
     }
 }
 
 void Player::SendQuestReward(Quest const* pQuest, uint32 XP) const
 {
-    uint32 questid = pQuest->GetQuestId();
-    WorldPacket data(SMSG_QUESTGIVER_QUEST_COMPLETE, (4 + 4 + 4 + 4 + 4 + pQuest->GetRewItemsCount() * 8));
-    data << questid;
-    data << uint32(0x03);
+    auto packet = std::make_unique<WorldPackets::Quest::QuestGiverQuestComplete>();
+    packet->questId = pQuest->GetQuestId();
+    packet->unknown = 0x03;
 
     if (GetLevel() < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL))
     {
-        data << XP;
-        data << uint32(pQuest->GetRewOrReqMoney());
+        packet->xp = XP;
+        packet->money = pQuest->GetRewOrReqMoney();
     }
     else
     {
-        data << uint32(0);
-        data << uint32(pQuest->GetRewOrReqMoney() + pQuest->GetRewMoneyMaxLevelAtComplete());
+        packet->xp = 0;
+        packet->money = pQuest->GetRewOrReqMoney() + pQuest->GetRewMoneyMaxLevelAtComplete();
     }
-    data << uint32(pQuest->GetRewItemsCount());             // max is 5
 
     for (uint32 i = 0; i < pQuest->GetRewItemsCount(); ++i)
     {
+        WorldPackets::Quest::QuestRewardItem item;
         if (pQuest->RewItemId[i] > 0)
-            data << pQuest->RewItemId[i] << pQuest->RewItemCount[i];
-        else
-            data << uint32(0) << uint32(0);
+        {
+            item.itemId = pQuest->RewItemId[i];
+            item.itemCount = pQuest->RewItemCount[i];
+        }
+        packet->rewardItems.push_back(item);
     }
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::move(packet));
 }
 
 // Sent when a quest is failed to be given off at questtaker. Specifically handled reasons:
@@ -14493,10 +14487,10 @@ void Player::SendQuestFailedAtTaker(uint32 questId, uint32 reason) const
 {
     if (questId)
     {
-        WorldPacket data(SMSG_QUESTGIVER_QUEST_FAILED, 8);
-        data << uint32(questId);
-        data << uint32(reason);
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestGiverQuestFailed>();
+        packet->questId = questId;
+        packet->reason = reason;
+        GetSession()->SendPacket(std::move(packet));
     }
 }
 
@@ -14504,9 +14498,9 @@ void Player::SendQuestFailed(uint32 questId) const
 {
     if (questId)
     {
-        WorldPacket data(SMSG_QUESTUPDATE_FAILED, 4);
-        data << questId;
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestUpdateFailed>();
+        packet->questId = questId;
+        GetSession()->SendPacket(std::move(packet));
     }
 }
 
@@ -14514,17 +14508,17 @@ void Player::SendQuestTimerFailed(uint32 questId) const
 {
     if (questId)
     {
-        WorldPacket data(SMSG_QUESTUPDATE_FAILEDTIMER, 4);
-        data << uint32(questId);
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestUpdateFailedTimer>();
+        packet->questId = questId;
+        GetSession()->SendPacket(std::move(packet));
     }
 }
 
 void Player::SendCanTakeQuestResponse(uint32 msg) const
 {
-    WorldPacket data(SMSG_QUESTGIVER_QUEST_INVALID, 4);
-    data << uint32(msg);
-    GetSession()->SendPacket(&data);
+    auto packet = std::make_unique<WorldPackets::Quest::QuestGiverQuestInvalid>();
+    packet->msg = msg;
+    GetSession()->SendPacket(std::move(packet));
 }
 
 void Player::SendQuestConfirmAccept(Quest const* pQuest, Player const* pReceiver) const
@@ -14544,11 +14538,11 @@ void Player::SendQuestConfirmAccept(Quest const* pQuest, Player const* pReceiver
             }
         }
 
-        WorldPacket data(SMSG_QUEST_CONFIRM_ACCEPT, (4 + strTitle.size() + 8));
-        data << uint32(pQuest->GetQuestId());
-        data << strTitle;
-        data << GetObjectGuid();
-        pReceiver->GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestConfirmAcceptResponse>();
+        packet->questId = pQuest->GetQuestId();
+        packet->questTitle = std::move(strTitle);
+        packet->senderGuid = GetObjectGuid();
+        pReceiver->GetSession()->SendPacket(std::move(packet));
     }
 }
 
@@ -14556,10 +14550,10 @@ void Player::SendPushToPartyResponse(Player const* pPlayer, uint8 msg) const
 {
     if (pPlayer)
     {
-        WorldPacket data(MSG_QUEST_PUSH_RESULT, (8 + 1));
-        data << pPlayer->GetObjectGuid();
-        data << uint8(msg);                                 // enum QuestShareMessages
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestPushResultResponse>();
+        packet->senderGuid = pPlayer->GetObjectGuid();
+        packet->msg = msg;                                 // enum QuestShareMessages
+        GetSession()->SendPacket(std::move(packet));
     }
 }
 
@@ -14571,10 +14565,10 @@ void Player::SendQuestUpdateAddItem(Quest const* pQuest, uint32 item_idx, uint32
         MANGOS_ASSERT(batchCount < 64 && "Quest slot count store is limited to 6 bits 2^6 = 64 (0..63)");
 
         // Update quest watcher and fire QUEST_WATCH_UPDATE for the current batch
-        WorldPacket data(SMSG_QUESTUPDATE_ADD_ITEM, (4 + 4));
-        data << pQuest->ReqItemId[item_idx];
-        data << batchCount;
-        GetSession()->SendPacket(&data);
+        auto packet = std::make_unique<WorldPackets::Quest::QuestUpdateAddItem>();
+        packet->itemId = pQuest->ReqItemId[item_idx];
+        packet->count = batchCount;
+        GetSession()->SendPacket(std::move(packet));
 
         // Update player field and fire UNIT_QUEST_LOG_CHANGED for self for the current batch
         uint16 slot = FindQuestSlot(pQuest->GetQuestId());
@@ -14596,13 +14590,13 @@ void Player::SendQuestUpdateAddCreatureOrGo(Quest const* pQuest, ObjectGuid guid
         entry = (-entry) | 0x80000000;
 
     // Update quest watcher and fire QUEST_WATCH_UPDATE
-    WorldPacket data(SMSG_QUESTUPDATE_ADD_KILL, (4 * 4 + 8));
-    data << uint32(pQuest->GetQuestId());
-    data << uint32(entry);
-    data << uint32(count);
-    data << uint32(pQuest->ReqCreatureOrGOCount[ creatureOrGO_idx ]);
-    data << guid;
-    GetSession()->SendPacket(&data);
+    auto addKillPacket = std::make_unique<WorldPackets::Quest::QuestUpdateAddKill>();
+    addKillPacket->questId = pQuest->GetQuestId();
+    addKillPacket->entry = static_cast<uint32>(entry);
+    addKillPacket->count = count;
+    addKillPacket->required = pQuest->ReqCreatureOrGOCount[ creatureOrGO_idx ];
+    addKillPacket->guid = guid;
+    GetSession()->SendPacket(std::move(addKillPacket));
 
     // Update player field and fire UNIT_QUEST_LOG_CHANGED for self
     uint16 slot = FindQuestSlot(pQuest->GetQuestId());
@@ -15382,7 +15376,7 @@ bool Player::IsAllowedToLoot(Creature const* creature)
     if (loot->isLooted()) // nothing to loot or everything looted.
         return false;
 
-    // Nostalrius: pas possible de looter si on n'etait pas la a la mort du mob.
+    // Nostalrius: cannot loot if not present at mob's death.
     if (!loot->IsAllowedLooter(GetObjectGuid()))
         return false;
 
@@ -15390,8 +15384,8 @@ bool Player::IsAllowedToLoot(Creature const* creature)
 
     if (!thisGroup)
         return (this == creature->GetOriginalLootRecipient());
-    // Verif suivante impossible en cas de groupe de BG
-    // puisque tous les groupes de BG ont comme ID = 0.
+    // Following check impossible for BG groups
+    // since all BG groups have ID = 0.
     else if (thisGroup->isBGGroup())
         return true;
     else if (thisGroup != creature->GetGroupLootRecipient())
@@ -15742,8 +15736,8 @@ bool Player::_LoadInventory(std::unique_ptr<QueryResult> result, uint32 timediff
             }
             else
             {
-                // Un probleme avec la maniere
-                // dont le PNJ de Bienvenue ajoute le stuff ...
+                // A problem with the way
+                // the Welcome NPC adds gear ...
                 //sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "Player::_LoadInventory: Player %s has item (GUID: %u Entry: %u) can't be loaded to inventory (Bag GUID: %u Slot: %u) by some reason, will send by mail.", GetName(),item_lowguid, item_id, bag_guid, slot);
                 CharacterDatabase.PExecute("DELETE FROM `character_inventory` WHERE `item_guid` = '%u'", item_lowguid);
                 problematicItems.push_back(item);
@@ -17138,38 +17132,32 @@ void Player::SavePositionInDB(ObjectGuid guid, uint32 mapId, float x, float y, f
 
 void Player::SendAttackSwingNotInRange() const
 {
-    WorldPacket data(SMSG_ATTACKSWING_NOTINRANGE, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::AttackSwingNotInRange>());
 }
 
 void Player::SendAttackSwingNotStanding() const
 {
-    WorldPacket data(SMSG_ATTACKSWING_NOTSTANDING, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::AttackSwingNotStanding>());
 }
 
 void Player::SendAttackSwingDeadTarget() const
 {
-    WorldPacket data(SMSG_ATTACKSWING_DEADTARGET, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::AttackSwingDeadTarget>());
 }
 
 void Player::SendAttackSwingCantAttack() const
 {
-    WorldPacket data(SMSG_ATTACKSWING_CANT_ATTACK, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::AttackSwingCantAttack>());
 }
 
 void Player::SendAttackSwingCancelAttack() const
 {
-    WorldPacket data(SMSG_CANCEL_COMBAT, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::CancelCombat>());
 }
 
 void Player::SendAttackSwingBadFacingAttack() const
 {
-    WorldPacket data(SMSG_ATTACKSWING_BADFACING, 0);
-    GetSession()->SendPacket(&data);
+    GetSession()->SendPacket(std::make_unique<WorldPackets::Combat::AttackSwingBadFacing>());
 }
 
 void Player::SendAutoRepeatCancel() const
@@ -18034,10 +18022,10 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
                 InterruptSpell(CURRENT_CHANNELED_SPELL, true);
     }
 
-    uint32 sourcenode = nodes[0];
+    uint32 sourceNode = nodes[0];
 
     // starting node too far away (cheat?)
-    TaxiNodesEntry const* node = sObjectMgr.GetTaxiNodeEntry(sourcenode);
+    TaxiNodesEntry const* node = sObjectMgr.GetTaxiNodeEntry(sourceNode);
     if (!node)
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
@@ -18082,26 +18070,27 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
     m_taxi.ClearTaxiDestinations();
 
     // 0 element current node
-    m_taxi.AddTaxiDestination(sourcenode);
+    m_taxi.AddTaxiDestination(sourceNode);
 
     float discount = npc ? GetReputationPriceDiscount(npc, true) : 1.0f;
     m_taxi.SetDiscount(discount);
 
     // fill destinations path tail
-    uint32 sourcepath = 0;
+    uint32 sourcePath = 0;
     uint32 sourceCost = 0;
-    uint32 totalcost = 0;
+    uint32 totalCost = 0;
     uint32 lastPath = 0;
     uint32 lastNode = nodes[1];
-    sObjectMgr.GetTaxiPath(sourcenode, lastNode, sourcepath, sourceCost);
-    if (!sourcepath)
+    sObjectMgr.GetTaxiPath(sourceNode, lastNode, sourcePath, sourceCost);
+    if (!sourcePath || sourcePath >= sTaxiPathNodesByPath.size())
     {
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "ActivateTaxiPathTo: Taxi path from nodes %u to %u is invalid!", sourceNode, lastNode);
         m_taxi.ClearTaxiDestinations();
         return false;
     }
-    lastPath = sourcepath;
+    lastPath = sourcePath;
     sourceCost = uint32(sourceCost * discount + 0.5f);
-    totalcost += sourceCost;
+    totalCost += sourceCost;
 
     // multiple path
     if (nodes.size() > 2)
@@ -18114,12 +18103,13 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
         {
             nextNode = nodes[nodeIndex];
             sObjectMgr.GetTaxiPath(lastNode, nextNode, nextPath, nextCost);
-            if (!nextPath)
+            if (!nextPath || nextPath >= sTaxiPathNodesByPath.size())
             {
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "ActivateTaxiPathTo: Taxi path from nodes %u to %u is invalid!", lastNode, nextNode);
                 m_taxi.ClearTaxiDestinations();
                 return false;
             }
-            totalcost += uint32(nextCost * discount + 0.5f);
+            totalCost += uint32(nextCost * discount + 0.5f);
 
             // find a transition
             uint32 inNode = 0;
@@ -18154,7 +18144,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
         }
 
         // add last path nodes
-        for (int i = lastOutNode; i < sTaxiPathNodesByPath[lastPath].size(); ++i)
+        for (size_t i = lastOutNode; i < sTaxiPathNodesByPath[lastPath].size(); ++i)
             m_taxi.AddTaxiPathNode(sTaxiPathNodesByPath[lastPath][i]);
         m_taxi.AddTaxiDestination(lastNode);
     }
@@ -18162,10 +18152,10 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
         m_taxi.AddTaxiDestination(lastNode);
 
     // get mount display id (in case non taximaster (npc==nullptr) allow more wide lookup)
-    uint32 mount_display_id = sObjectMgr.GetTaxiMountDisplayId(sourcenode, GetTeam(), npc == nullptr);
+    uint32 mount_display_id = sObjectMgr.GetTaxiMountDisplayId(sourceNode, GetTeam(), npc == nullptr);
 
     // in spell case allow display id to be 0
-    if ((mount_display_id == 0 && spellid == 0) || sourcepath == 0)
+    if ((mount_display_id == 0 && spellid == 0) || sourcePath == 0)
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
         data << uint32(ERR_TAXIUNSPECIFIEDSERVERERROR);
@@ -18176,7 +18166,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
 
     uint32 money = GetMoney();
 
-    if (money < totalcost)
+    if (money < totalCost)
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
         data << uint32(ERR_TAXINOTENOUGHMONEY);
@@ -18212,7 +18202,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature const
     data << uint32(ERR_TAXIOK);
     GetSession()->SendPacket(&data);
 
-    GetSession()->SendDoFlight(mount_display_id, sourcepath);
+    GetSession()->SendDoFlight(mount_display_id, sourcePath);
 
     return true;
 }
@@ -18232,7 +18222,7 @@ bool Player::ActivateTaxiPathTo(uint32 taxi_path_id, uint32 spellid /*= 0*/, boo
     return ActivateTaxiPathTo(nodes, nullptr, spellid, nocheck);
 }
 
-void Player::ContinueTaxiFlight() const
+void Player::ContinueTaxiFlight()
 {
     uint32 sourceNode = m_taxi.GetTaxiSource();
     if (!sourceNode)
@@ -18243,8 +18233,12 @@ void Player::ContinueTaxiFlight() const
     uint32 mountDisplayId = sObjectMgr.GetTaxiMountDisplayId(sourceNode, GetTeam(), true);
     uint32 path = m_taxi.GetCurrentTaxiPath();
 
-    // search appropriate start path node
-    uint32 startNode = 0;
+    if (path >= sTaxiPathNodesByPath.size())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "ContinueTaxiFlight: %s attempts to continue out of bounds taxi path %u", GetName(), path);
+        m_taxi.ClearTaxiDestinations();
+        return;
+    }
 
     TaxiPathNodeList const& nodeList = sTaxiPathNodesByPath[path];
 
@@ -18253,6 +18247,9 @@ void Player::ContinueTaxiFlight() const
         (nodeList[0].x - GetPositionX()) * (nodeList[0].x - GetPositionX()) +
         (nodeList[0].y - GetPositionY()) * (nodeList[0].y - GetPositionY()) +
         (nodeList[0].z - GetPositionZ()) * (nodeList[0].z - GetPositionZ());
+
+    // search appropriate start path node
+    uint32 startNode = 0;
 
     for (uint32 i = 1; i < nodeList.size(); ++i)
     {
@@ -18769,7 +18766,7 @@ void Player::LeaveBattleground(bool teleportToEntryPoint)
                 AddAura(26013, 0, this);               // Deserter
         }
         bg->RemovePlayerAtLeave(GetObjectGuid(), teleportToEntryPoint, true);
-        sLog.Out(LOG_BG, LOG_LVL_DETAIL, "[%u,%u]: %s:%u [%u:%s] leaves",
+        sLog.Out(LOG_BG, LOG_LVL_DETAIL, "[%u,%u]: %s:%u [%u:%s] leaves, TypeID: %u",
                  bg->GetMapId(), bg->GetInstanceID(),
                  GetName(),
                  GetGUIDLow(), GetSession()->GetAccountId(), GetSession()->GetRemoteAddress().c_str(),
@@ -18789,7 +18786,7 @@ bool Player::IsVisibleInGridForPlayer(Player const* pl) const
     if (pl->IsGameMaster() && GetSession()->GetSecurity() <= pl->GetSession()->GetSecurity())
         return true;
 
-    // Nostalrius: visibilite des fantomes par membres du raid.
+    // Nostalrius: ghost visibility by raid members.
     if (IsInSameRaidWith(pl))
         return true;
 
@@ -18808,7 +18805,7 @@ bool Player::IsVisibleInGridForPlayer(Player const* pl) const
         if (corpse)
         {
             // 20 - aggro distance for same level, 25 - max additional distance if player level less that creature level
-            // Fix Nostalrius : la distance est fix a 100m.
+            // Fix Nostalrius : distance is fixed at 100m.
             if (corpse->IsWithinDistInMap(this, 100))
                 return true;
         }
@@ -19868,10 +19865,10 @@ bool Player::HasItemFitToSpellReqirements(SpellEntry const* spellInfo, Item cons
 void Player::RemoveItemDependentAurasAndCasts(Item const* pItem)
 {
     ItemPrototype const* itemProto = pItem->GetProto();
-    // Nostalrius: certains items ne retirent pas de buff.
+    // Nostalrius: some items do not remove buffs.
     switch (itemProto->ItemId)
     {
-        // Pierres de sort
+        // Spellstones
         case 5522:
         case 13602:
         case 13603:
@@ -20106,7 +20103,7 @@ uint32 Player::GetBaseWeaponSkillValue(WeaponAttackType attType) const
     return GetSkillValuePure(skill);
 }
 
-void Player::ResurectUsingRequestData()
+void Player::ResurrectUsingRequestData()
 {
     // Teleport before resurrecting by player, otherwise the player might get attacked from creatures near his corpse
     if (m_resurrectData.resurrectorGuid.IsPlayer())
@@ -20506,7 +20503,7 @@ bool Player::CanUseBattleGroundObject() const
                //!HasStealthAura() &&                           // not stealthed
                //!HasInvisibilityAura() &&                      // not invisible
                IsAlive() &&                                   // live player
-               !HasUnitState(UNIT_STATE_CAN_NOT_REACT_OR_LOST_CONTROL)  // Nostalrius : en cecite ou fear par exemple
+               !HasUnitState(UNIT_STATE_CAN_NOT_REACT_OR_LOST_CONTROL)  // Nostalrius : e.g. while blinded or feared
            );
 }
 
@@ -21312,13 +21309,13 @@ uint32 GetPriestSpellForRace(uint8 race)
     switch (race)
     {
         case RACE_HUMAN:
-            return 19243; // Priere de desespoir
+            return 19243; // Desperate Prayer
         case RACE_UNDEAD:
-            return 19280; // Peste devorante
+            return 19280; // Devouring Plague
         case RACE_DWARF:
-            return 6346; // Gardien de peur
+            return 6346; // Fear Ward
         case RACE_NIGHTELF:
-            return 2651; // Grace d'Elune
+            return 2651; // Elune's Grace
         default:
             return 0;
     }
@@ -21329,7 +21326,7 @@ uint32 GetCapitalReputationForRace(uint8 race)
     switch (race)
     {
         case RACE_HUMAN:
-            return 72; // Hurlevent
+            return 72; // Stormwind
         case RACE_TROLL:
         case RACE_ORC:
             return 76; // Orgrimmar
@@ -21350,7 +21347,7 @@ uint32 GetCapitalReputationForRace(uint8 race)
 
 bool Player::ConvertSpell(uint32 oldSpellId, uint32 newSpellId)
 {
-    // Conversion des boutons d'actions
+    // Convert action buttons
     ActionButtonList& actions = GetSession()->GetMasterPlayer()->GetActionButtons();
     for (auto& action : actions)
     {
@@ -21358,29 +21355,29 @@ bool Player::ConvertSpell(uint32 oldSpellId, uint32 newSpellId)
             continue;
         if (action.second.GetType() != ACTION_BUTTON_SPELL || action.second.GetAction() != oldSpellId)
             continue;
-        if (newSpellId > 0) // Changer le bouton
+        if (newSpellId > 0) // Change the button
             action.second.SetActionAndType(newSpellId, ACTION_BUTTON_SPELL);
-        else // Sinon le supprimer
+        else // Otherwise delete it
             action.second.uState = ACTIONBUTTON_DELETED;
     }
-    // Le sort en lui meme
+    // The spell itself
     PlayerSpellMap::const_iterator mySpells_itr = m_spells.find(oldSpellId);
     if (mySpells_itr != m_spells.end() && mySpells_itr->second.state != PLAYERSPELL_REMOVED)
     {
-        CHANGERACE_LOG("Changement sort %u -> %u", oldSpellId, newSpellId);
+        CHANGERACE_LOG("Spell change %u -> %u", oldSpellId, newSpellId);
         RemoveSpell(oldSpellId, false, false);
         if (newSpellId > 0)
             LearnSpell(newSpellId, false);
     }
     //else
-    //    CHANGERACE_LOG("N'a pas le sort %u.", oldSpellId);
+    //    CHANGERACE_LOG("Does not have spell %u.", oldSpellId);
     return true;
 }
 
 bool Player::ChangeSpellsForRace(uint8 oldRace, uint8 newRace)
 {
     Team oldTeam = TeamForRace(oldRace);
-    // Les classes qui ont des sorts differents
+    // Classes that have different spells
     switch (GetClass())
     {
         case CLASS_PRIEST:
@@ -21405,17 +21402,17 @@ bool Player::ChangeSpellsForRace(uint8 oldRace, uint8 newRace)
         uint32 myNewSpellId = oldTeam == ALLIANCE ? it->second : it->first;
         ConvertSpell(myOldSpellId, myNewSpellId);
     }
-    CHANGERACE_LOG("Transfert des sorts [OK]");
+    CHANGERACE_LOG("Spell transfer [OK]");
     return true;
 }
 
 bool Player::ChangeItemsForRace(uint8 oldRace, uint8 newRace)
 {
     Team newTeam = TeamForRace(newRace);
-    // 1- Changement des montures
+    // 1- Mount changes
     for (int i = PLAYER_SLOT_START; i < PLAYER_SLOT_END; ++i)
     {
-        // Une monture
+        // A mount
         Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, i);
         if (item && item->GetProto()->Class == ITEM_CLASS_JUNK && item->GetProto()->RequiredSkill == 762)
         {
@@ -21423,28 +21420,28 @@ bool Player::ChangeItemsForRace(uint8 oldRace, uint8 newRace)
             uint8 currRaceNum   = 0;
             if (!sObjectMgr.GetMountDataByEntry(item->GetEntry(), currMountRace, currRaceNum))
             {
-                CHANGERACE_ERR("Monture %u non renseignee dans `player_factionchange_mounts`.", item->GetEntry());
+                CHANGERACE_ERR("Mount %u not listed in `player_factionchange_mounts`.", item->GetEntry());
                 continue;
             }
-            // Soit :
-            // - monture de mon ancienne race -> Traduire en nouvelle race
-            // - monture d'une autre race     -> Traduire en la race opposee
+            // Either:
+            // - mount of my old race    -> Convert to new race
+            // - mount of another race   -> Convert to the opposite race
             Races mountNewRace = (currMountRace == oldRace) ? Races(newRace) : sObjectMgr.GetOppositeRace(currMountRace);
             uint32 newMountId = sObjectMgr.GetMountItemEntry(mountNewRace, currRaceNum);
-            // Si on trouve pas, une monture aleatoire de la race opposee suffira.
+            // If not found, a random mount of the opposite race will do.
             if (!newMountId)
                 newMountId = sObjectMgr.GetRandomMountForRace(mountNewRace);
-            // Sinon ben tampis.
+            // Otherwise too bad.
             if (!newMountId)
             {
-                CHANGERACE_ERR("Pas de monture pour la race %u dans `player_factionchange_mounts` pour transferer %u.", mountNewRace, item->GetEntry());
+                CHANGERACE_ERR("No mount for race %u in `player_factionchange_mounts` to transfer %u.", mountNewRace, item->GetEntry());
                 continue;
             }
             ItemPrototype const* pNewMountProto  = sObjectMgr.GetItemPrototype(newMountId);
-            CHANGERACE_LOG("Changement de la monture %u en %u.", item->GetEntry(), newMountId);
+            CHANGERACE_LOG("Changing mount %u to %u.", item->GetEntry(), newMountId);
             if (!pNewMountProto || !item->ChangeEntry(pNewMountProto))
             {
-                CHANGERACE_ERR("Impossible de changer l'item %u.", item->GetEntry());
+                CHANGERACE_ERR("Unable to change item %u.", item->GetEntry());
                 return false;
             }
         }
@@ -21452,7 +21449,7 @@ bool Player::ChangeItemsForRace(uint8 oldRace, uint8 newRace)
         //    CHANGERACE_LOG("Item %u pas une monture. Class %u != %u. RequiredSkill = %u", item->GetEntry(), item->GetProto()->Class, ITEM_CLASS_JUNK, m_items[i]->GetProto()->RequiredSkill);
     }
 
-    // 2- Les items a inverser
+    // 2- Items to swap
     for (std::map<uint32, uint32>::const_iterator it = sObjectMgr.factionchange_items.begin(); it != sObjectMgr.factionchange_items.end(); ++it)
     {
         ItemPrototype const* pNewItemProto    = sObjectMgr.GetItemPrototype(newTeam == ALLIANCE ? it->first : it->second);
@@ -21464,30 +21461,30 @@ bool Player::ChangeItemsForRace(uint8 oldRace, uint8 newRace)
             Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, i);
             if (item && item->GetEntry() == removeItemId)
             {
-                CHANGERACE_LOG("Changement item %u -> %u.", removeItemId, pNewItemProto->ItemId);
+                CHANGERACE_LOG("Item change %u -> %u.", removeItemId, pNewItemProto->ItemId);
                 if (!item->ChangeEntry(pNewItemProto))
                 {
-                    CHANGERACE_ERR("Impossible de changer %u en %u.", removeItemId, pNewItemProto->ItemId);
+                    CHANGERACE_ERR("Unable to change %u to %u.", removeItemId, pNewItemProto->ItemId);
                     return false;
                 }
             }
         }
     }
 
-    // 3- Et on regarde finalement si il reste des items non equipables
+    // 3- Finally check if there are remaining unequippable items
     //std::map<uint32, uint32> addItems;
     for (int i = PLAYER_SLOT_START; i < PLAYER_SLOT_END; ++i)
     {
         if (Item* pItem = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
         {
-            // Item deja gere ? (ObjectMgr)
+            // Item already handled? (ObjectMgr)
             bool previouslyHandled = false;
             for (std::map<uint32, uint32>::const_iterator it2 = sObjectMgr.factionchange_items.begin(); it2 != sObjectMgr.factionchange_items.end(); ++it2)
             {
                 if ((it2->first == pItem->GetEntry()) || (pItem->GetEntry() == it2->second))
                 {
                     previouslyHandled = true;
-                    CHANGERACE_LOG("Item %u deja gere.", pItem->GetEntry());
+                    CHANGERACE_LOG("Item %u already handled.", pItem->GetEntry());
                     break;
                 }
             }
@@ -21505,12 +21502,12 @@ bool Player::ChangeItemsForRace(uint8 oldRace, uint8 newRace)
 
             if (!canEquip)
             {
-                CHANGERACE_ERR("Objet %u non gere ! A ajouter dans player_factionchange_items.", pProto->ItemId);
+                CHANGERACE_ERR("Item %u not handled! Add to player_factionchange_items.", pProto->ItemId);
                 //DestroyItem(pItem->GetBagSlot(), pItem->GetSlot(), true);
             }
         }
     }
-    CHANGERACE_LOG("Changement des items [OK]");
+    CHANGERACE_LOG("Item changes [OK]");
     return true;
 }
 
@@ -21535,7 +21532,7 @@ bool Player::ChangeReputationsForRace(uint8 oldRace, uint8 newRace)
     int32 standingAtOldCapital  = pStateAtOldCapital ? pStateAtOldCapital->Standing : 0;
     FactionStateList const& stateList = GetReputationMgr().GetStateList();
 
-    // Gestion des capitales
+    // Capital city handling
     if (changeTeam)
     {
         GetReputationMgr().SetReputation(oldCapitalFaction, -standingAtOldCapital + GetReputationMgr().GetBaseReputation(oldCapitalFaction));
@@ -21546,13 +21543,13 @@ bool Player::ChangeReputationsForRace(uint8 oldRace, uint8 newRace)
         GetReputationMgr().SetReputation(oldCapitalFaction, standingAtOldCapital + GetReputationMgr().GetBaseReputation(oldCapitalFaction));
         GetReputationMgr().SetReputation(newCapitalFaction, standingAtCapital + GetReputationMgr().GetBaseReputation(newCapitalFaction));
     }
-    // Les autres de maniere generique
+    // The rest in a generic manner
     for (FactionStateList::const_iterator it = stateList.begin(); it != stateList.end(); ++it)
     {
-        // Deja fait plus haut.
+        // Already done above.
         if (it->second.ID == oldCapitalFaction->ID || it->second.ID == newCapitalFaction->ID)
             continue;
-        // Ou gere plus tard avec sObjectMgr
+        // Or handled later with sObjectMgr
         bool found = false;
         for (std::map<uint32, uint32>::const_iterator it2 = sObjectMgr.factionchange_reputations.begin(); it2 != sObjectMgr.factionchange_reputations.end(); ++it2)
         {
@@ -21569,16 +21566,16 @@ bool Player::ChangeReputationsForRace(uint8 oldRace, uint8 newRace)
         if (!pState || !pFactionEntry)
             continue;
 
-        // Calcul des reputations/flags de base
+        // Calculate base reputations/flags
         int newIdx = pFactionEntry->GetIndexFitTo(newRaceMask, GetClassMask());
         int32 newBaseRep = newIdx >= 0 ? pFactionEntry->BaseRepValue[newIdx] : 0;
         int oldIdx = pFactionEntry->GetIndexFitTo(oldRaceMask, GetClassMask());
         int32 oldBaseRep = oldIdx >= 0 ? pFactionEntry->BaseRepValue[oldIdx] : 0;
 
-        // De signe different et non nulles.
+        // Different sign and non-zero.
         if (newBaseRep * oldBaseRep < 0)
         {
-            CHANGERACE_LOG("Inversion du Standing de %u (%i)", it->second.ID, pState->Standing);
+            CHANGERACE_LOG("Inverting standing of %u (%i)", it->second.ID, pState->Standing);
             pState->Standing = -pState->Standing;
             GetReputationMgr().SendState(pState);
             pState->needSave = true;
@@ -21587,35 +21584,34 @@ bool Player::ChangeReputationsForRace(uint8 oldRace, uint8 newRace)
     if (!changeTeam)
         return true;
     Team newTeam = TeamForRace(newRace);
-#define SWAP_TYPE(type, val1, val2) { type tmp; tmp = val1; val1 = val2; val2 = tmp; }
-    // Certaines reputs a inverser
+    // Some reputations to swap
     for (std::map<uint32, uint32>::const_iterator it = sObjectMgr.factionchange_reputations.begin(); it != sObjectMgr.factionchange_reputations.end(); ++it)
     {
         FactionEntry const* my_new_reputation = sObjectMgr.GetFactionEntry(newTeam == ALLIANCE ? it->first : it->second);
         FactionEntry const* my_old_reputation = sObjectMgr.GetFactionEntry(newTeam == ALLIANCE ? it->second : it->first);
         // 'my_new_reputation' = 'my_old_reputation'
-        // Et on supprime 'my_old_reputation'
+        // And we remove 'my_old_reputation'
         FactionState* pNew = (FactionState*)GetReputationMgr().GetState(my_new_reputation);
         FactionState* pOld = (FactionState*)GetReputationMgr().GetState(my_old_reputation);
 
         if (!pNew || !pOld)
             continue;
-        CHANGERACE_LOG("Changement reputation %u (%i) <-> %u (%i)", my_new_reputation->ID, pNew->Standing, my_old_reputation->ID, pOld->Standing);
-        SWAP_TYPE(uint32, pNew->Flags, pOld->Flags);
-        SWAP_TYPE(int32, pNew->Standing, pOld->Standing);
+        CHANGERACE_LOG("Reputation change %u (%i) <-> %u (%i)", my_new_reputation->ID, pNew->Standing, my_old_reputation->ID, pOld->Standing);
+        std::swap(pNew->Flags, pOld->Flags);
+        std::swap(pNew->Standing, pOld->Standing);
         pOld->needSave = true;
         pNew->needSave = true;
         GetReputationMgr().SendState(pOld);
         GetReputationMgr().SendState(pNew);
     }
-    CHANGERACE_LOG("Changements reputations OK");
+    CHANGERACE_LOG("Reputation changes OK");
     return true;
 }
 
 bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
 {
     Team newTeam = TeamForRace(newRace);
-    // 1 - Les quetes a inverser (player_factionchange_quests)
+    // 1 - Quests to swap (player_factionchange_quests)
     for (std::map<uint32, uint32>::const_iterator it = sObjectMgr.factionchange_quests.begin(); it != sObjectMgr.factionchange_quests.end(); ++it)
     {
         if (it->first == it->second)
@@ -21634,7 +21630,7 @@ bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
                     continue;
 
                 uint16 log_slot = FindQuestSlot(removeQuestId);
-                // Reset des objectifs si en cours.
+                // Reset objectives if in progress.
                 if (log_slot != MAX_QUEST_LOG_SIZE)
                 {
                     // Reset
@@ -21643,25 +21639,25 @@ bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
                     SetQuestSlotState(log_slot, QUEST_STATUS_NONE);
                     SetQuestSlot(log_slot, 0);
                     TakeOrReplaceQuestStartItems(removeQuestId, true, false);
-                    // Et prendre la nouvelle
+                    // And take the new one
                     if (!CanAddQuest(pNewQuest, true))
                     {
-                        CHANGERACE_ERR("Impossible d'ajouter la quete %u !", pNewQuest->GetQuestId());
+                        CHANGERACE_ERR("Unable to add quest %u!", pNewQuest->GetQuestId());
                         return false;
                     }
-                    CHANGERACE_LOG("Changement quete %u -> %u (En cours)", pRemoveQuest->GetQuestId(), pNewQuest->GetQuestId());
+                    CHANGERACE_LOG("Quest change %u -> %u (In progress)", pRemoveQuest->GetQuestId(), pNewQuest->GetQuestId());
                     AddQuest(pNewQuest, nullptr);
                 }
-                else // Ne pas reset. Juste changer l'ID.
+                else // Don't reset. Just change the ID.
                 {
-                    CHANGERACE_LOG("Changement quete %u -> %u (Deja completee)", pRemoveQuest->GetQuestId(), pNewQuest->GetQuestId());
+                    CHANGERACE_LOG("Quest change %u -> %u (Already completed)", pRemoveQuest->GetQuestId(), pNewQuest->GetQuestId());
                     QuestStatusData newQuestStatus;
                     newQuestStatus.uState = QUEST_NEW;
                     newQuestStatus.m_rewarded = itr.second.m_rewarded;
                     newQuestStatus.m_explored = itr.second.m_explored;
                     newQuestStatus.m_timer = itr.second.m_timer;
                     newQuestStatus.m_status = itr.second.m_status;
-                    // Pas de duplicate dans les quetes
+                    // No duplicate quests
                     QuestStatusMap::iterator eraseNewQuest = mQuestStatus.find(pNewQuest->GetQuestId());
                     if (eraseNewQuest != mQuestStatus.end())
                         mQuestStatus.erase(eraseNewQuest);
@@ -21673,13 +21669,13 @@ bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
         }
     }
 
-    // 2 - Et supprimer les quetes non accessibles.
+    // 2 - And remove inaccessible quests.
     QuestStatusMap::iterator itr = mQuestStatus.begin();
     while (itr != mQuestStatus.end())
     {
         uint32 questId = itr->first;
         Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
-        // Probleme de quete, ou deja supprimee
+        // Quest issue, or already deleted
         if (!pQuest || !pQuest->IsActive() || itr->second.uState == QUEST_DELETED)
         {
             ++itr;
@@ -21688,11 +21684,11 @@ bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
         if (SatisfyQuestSkill(pQuest, false) && SatisfyQuestRace(pQuest, false) && SatisfyQuestReputation(pQuest, false) && SatisfyQuestClass(pQuest, false))
         {
             ++itr;
-            continue; // Pas besoin de toucher a cette quete
+            continue; // No need to touch this quest
         }
-        // Sinon, il faut supprimer
+        // Otherwise, it must be removed
         uint16 log_slot = FindQuestSlot(questId);
-        // En cours de completion, et pas deja supprimee dans la boucle precedente.
+        // In progress, and not already deleted in the previous loop.
         if (log_slot != MAX_QUEST_LOG_SIZE)
         {
             if (pQuest->HasSpecialFlag(QUEST_SPECIAL_FLAG_TIMED))
@@ -21701,7 +21697,7 @@ bool Player::ChangeQuestsForRace(uint8 oldRace, uint8 newRace)
             TakeOrReplaceQuestStartItems(itr->first, true, false);
         }
         itr->second.uState = QUEST_DELETED;
-        CHANGERACE_LOG("Suppression de la quete %u", questId);
+        CHANGERACE_LOG("Removing quest %u", questId);
         ++itr;
     }
     return true;
@@ -22020,8 +22016,7 @@ void Player::TaxiStepFinished(bool lastPointReached)
         {
             if (m_taxi.SetTaximaskNode(sourcenode))
             {
-                WorldPacket data(SMSG_NEW_TAXI_PATH, 0);
-                GetSession()->SendPacket(&data);
+                GetSession()->SendPacket(std::make_unique<WorldPackets::Taxi::NewTaxiPath>());
             }
         }
 
@@ -22494,7 +22489,7 @@ template <class T> T Player::ApplySpellMod(uint32 spellId, SpellModOp op, T &bas
                 DropModCharge(mod, spell);
         }
 
-        // Nostalrius : fix ecorce (22812 - +1sec incant) + rapidite nature (17116 - sorts instant) = 0sec de cast
+        // Nostalrius : fix barkskin (22812 - +1sec cast time) + nature's swiftness (17116 - instant spells) = 0sec cast
         if (mod->op == SPELLMOD_CASTING_TIME && mod->type == SPELLMOD_PCT && mod->value == -100)
         {
             totalpct = -100;

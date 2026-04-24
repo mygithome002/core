@@ -42,6 +42,8 @@ set (shared_SRCS
     Config/ConfigEnv.h
     Crypto/BigNumber.h
     Crypto/BigNumber.cpp
+    Crypto/InitializeCrypto.h
+    Crypto/InitializeCrypto.cpp
     Crypto/Authentication/SRP6.h
     Crypto/Authentication/SRP6.cpp
     Crypto/Encoding/Base32.h
@@ -54,6 +56,8 @@ set (shared_SRCS
     Crypto/Hash/MD5.cpp
     Crypto/Hash/SHA1.h
     Crypto/Hash/SHA1.cpp
+    Compression/ZLib.h
+    Compression/ZLib.cpp
     Database/Database.h
     Database/DatabaseCallback.h
     Database/DatabaseEnv.h
@@ -75,8 +79,9 @@ set (shared_SRCS
     Database/SQLStorageImpl.h
     Multithreading/Messager.h
     nonstd/expected.hpp
-    TimePeriod.h
+    nonstd/nodiscard.hpp
     nonstd/optional.hpp
+    TimePeriod.h
     ByteBuffer.cpp
     Common.cpp
     Log.cpp
@@ -251,12 +256,19 @@ target_include_directories(shared PUBLIC
   ${CMAKE_BINARY_DIR}
   ${MYSQL_INCLUDE_DIR}
   ${OPENSSL_INCLUDE_DIR}
+  ${ZLIB_INCLUDE_DIRS}
 )
 
 if(WIN32)
   target_include_directories(shared PUBLIC
     ${CMAKE_SOURCE_DIR}/dep/windows/include
   )
+
+  if(MINGW)
+    target_include_directories(shared PRIVATE
+      ${CMAKE_SOURCE_DIR}/dep/src/libseh
+    )
+  endif()
 endif()
 
 if (REQUIRES_LIBCURL)
@@ -279,10 +291,24 @@ endif(UNIX)
 
 if(WIN32)
   target_link_libraries(shared PUBLIC ws2_32 mswsock)
+
+  if(MINGW)
+    # MinGW needs libseh for the debugger thread-name SEH handler in
+    # CreateThread.cpp.
+    # MinGW also needs an explicit winmm link because it does not honor
+    # TimePeriod.cpp's Winmm.lib pragma.
+    target_link_libraries(shared PRIVATE libseh winmm)
+  endif()
 endif()
 
 if (ENABLE_CPPTRACE)
   target_link_libraries(shared PRIVATE cpptrace::cpptrace)
+endif()
+
+if(WIN32)
+  target_link_libraries(shared PUBLIC zlib)
+else()
+  target_link_libraries(shared PUBLIC ${ZLIB_LIBRARIES})
 endif()
 
 SET_TARGET_PROPERTIES(shared PROPERTIES FOLDER "Game Libs")

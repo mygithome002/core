@@ -821,9 +821,9 @@ void Creature::Update(uint32 update_diff, uint32 diff)
                 break;
 
             // Youfie - <Nostalrius>
-            // Cf. fix de Daemon [c1491] & mon autre bricolage de celui-ci [c1527)
-            // Les mobs 11357, 8901, 14826 etc. : ont des minuscules temps de repop. Sans rajouter cette condition, tous les
-            // mobs spawn via un event/script despawn (loots avec) au bout de genre 25s, sans qu'on puisse le changer dans la DB car pas de GUID fixe.
+            // Cf. Daemon's fix [c1491] & my other patch on top of it [c1527)
+            // Mobs 11357, 8901, 14826 etc. have very short respawn times. Without this condition, all
+            // mobs spawned via event/script despawn (loot included) after about 25s, with no way to change it in the DB since there is no fixed GUID.
             if (m_corpseDecayTimer <= update_diff || (m_respawnTime <= time(nullptr) && GetDBTableGUIDLow() && !IsPet()))
             {
                 if (IsInWorld())                            // can be despawned by update pool
@@ -3246,7 +3246,7 @@ time_t Creature::GetRespawnTimeEx() const
 
 void Creature::GetRespawnCoord(float &x, float &y, float &z, float* ori, float* dist) const
 {
-    // Nostalrius : pouvoir changer point de spawn d'un mob -> Creature::SetHomePosition
+    // Nostalrius : allow changing a mob's spawn point -> Creature::SetHomePosition
     if (m_homePosition.x > 0.1f || m_homePosition.x < -0.1f)
     {
         x = m_homePosition.x;
@@ -3483,6 +3483,7 @@ void Creature::ClearTemporaryFaction()
 
 void Creature::SendAreaSpiritHealerQueryOpcode(Player* pl)
 {
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_4_2
     uint32 next_resurrect = 0;
     if (Spell* pcurSpell = GetCurrentSpell(CURRENT_CHANNELED_SPELL))
         next_resurrect = pcurSpell->GetCastedTime();
@@ -3490,6 +3491,7 @@ void Creature::SendAreaSpiritHealerQueryOpcode(Player* pl)
     data << ObjectGuid(GetObjectGuid());
     data << uint32(next_resurrect);
     pl->SendDirectMessage(&data);
+#endif
 }
 
 void Creature::DisappearAndDie()
@@ -3954,6 +3956,13 @@ SpellCastResult Creature::TryToCast(Unit* pTarget, SpellEntry const* pSpellInfo,
         // Do not use dismounting spells when target is not mounted (there are 4 such spells).
         if (!pTarget->IsMounted() && pSpellInfo->IsDismountSpell())
             return SPELL_FAILED_ONLY_MOUNTED;
+
+        // Do not summon multiple of same guardian mob.
+        for (uint32 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+        {
+            if (pSpellInfo->Effect[i] == SPELL_EFFECT_SUMMON_GUARDIAN && GetGuardianCountWithEntry(pSpellInfo->EffectMiscValue[i]))
+                return SPELL_FAILED_ALREADY_HAVE_SUMMON;
+        }
     }
 
     // Interrupt any previous spell
