@@ -7,6 +7,7 @@
 #include "nonstd/optional.hpp"
 #include <string>
 #include <vector>
+#include <array>
 
 namespace WorldPackets { namespace Misc
 {
@@ -359,23 +360,42 @@ namespace WorldPackets { namespace Misc
         void ReadFromWorldPacket(WorldPacket& recv_data) override;
     };
 
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_5_1
-    class WardenData final : public ClientPacket
+    // --- Server Packets ---
+
+    // SMSG_MEETINGSTONE_MEMBER_ADDED: notifies group members that a new player was added via LFG
+    class MeetingstoneMemberAdded final : public ServerPacket
     {
     public:
-        std::vector<uint8> data;
+        ObjectGuid playerGuid; // guid of the player that was added
 
-        explicit WardenData() : ClientPacket(CMSG_WARDEN_DATA) {}
-        void ReadFromWorldPacket(WorldPacket& recv_data) override;
+        explicit MeetingstoneMemberAdded() : ServerPacket(SMSG_MEETINGSTONE_MEMBER_ADDED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
     };
-#endif
 
-    // --- Server Packets ---
+    // SMSG_MEETINGSTONE_IN_PROGRESS: empty body; sent periodically while the LFG queue is still searching
+    class MeetingstoneInProgress final : public ServerPacket
+    {
+    public:
+        explicit MeetingstoneInProgress() : ServerPacket(SMSG_MEETINGSTONE_IN_PROGRESS) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    // SMSG_MEETINGSTONE_COMPLETE: empty body; sent when the LFG search completes successfully
+    class MeetingstoneComplete final : public ServerPacket
+    {
+    public:
+        explicit MeetingstoneComplete() : ServerPacket(SMSG_MEETINGSTONE_COMPLETE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
 
     class LogoutComplete final : public ServerPacket
     {
     public:
         explicit LogoutComplete() : ServerPacket(SMSG_LOGOUT_COMPLETE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -383,6 +403,7 @@ namespace WorldPackets { namespace Misc
     {
     public:
         explicit LogoutCancelAck() : ServerPacket(SMSG_LOGOUT_CANCEL_ACK) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -392,6 +413,7 @@ namespace WorldPackets { namespace Misc
         uint8 standState = 0;
 
         explicit StandStateUpdate() : ServerPacket(SMSG_STANDSTATE_UPDATE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -403,6 +425,7 @@ namespace WorldPackets { namespace Misc
         int32 timeLeftInSeconds = 0;
 
         explicit PlayTimeWarning() : ServerPacket(SMSG_PLAY_TIME_WARNING) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 #endif
@@ -414,6 +437,7 @@ namespace WorldPackets { namespace Misc
         uint8 instant = 0;
 
         explicit LogoutResponse() : ServerPacket(SMSG_LOGOUT_RESPONSE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -424,6 +448,7 @@ namespace WorldPackets { namespace Misc
         uint32 levelPlayedTime = 0;
 
         explicit PlayedTime() : ServerPacket(SMSG_PLAYED_TIME) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -433,6 +458,7 @@ namespace WorldPackets { namespace Misc
         ObjectGuid guid;
 
         explicit InspectResponse() : ServerPacket(SMSG_INSPECT) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -442,6 +468,7 @@ namespace WorldPackets { namespace Misc
         std::string message; // max CString length allowed: 256
 
         explicit WhoisResponse() : ServerPacket(SMSG_WHOIS) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -453,6 +480,7 @@ namespace WorldPackets { namespace Misc
         std::vector<uint8> compressedData;
 
         explicit UpdateAccountDataResponse() : ServerPacket(SMSG_UPDATE_ACCOUNT_DATA) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -483,6 +511,7 @@ namespace WorldPackets { namespace Misc
 #endif
 
         explicit InspectHonorStatsResponse() : ServerPacket(MSG_INSPECT_HONOR_STATS) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -500,6 +529,7 @@ namespace WorldPackets { namespace Misc
 #endif
 
         explicit WeatherUpdate() : ServerPacket(SMSG_WEATHER) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 #endif
@@ -511,6 +541,7 @@ namespace WorldPackets { namespace Misc
         std::string text;
 
         explicit ServerMessage() : ServerPacket(SMSG_SERVER_MESSAGE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -520,6 +551,7 @@ namespace WorldPackets { namespace Misc
         uint8 reason = 0;
 
         explicit MeetingstoneJoinFailed() : ServerPacket(SMSG_MEETINGSTONE_JOINFAILED) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -535,6 +567,529 @@ namespace WorldPackets { namespace Misc
 #endif
 
         explicit MeetingstoneSetQueue() : ServerPacket(SMSG_MEETINGSTONE_SETQUEUE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PvpCredit final : public ServerPacket
+    {
+    public:
+        int32 honor = 0;          // Amount of honor gained
+        ObjectGuid victimGuid;    // GUID of the killed unit (empty if no victim)
+        int32 victimRank = 0;     // Rank of the victim (0 = no rank, 19 = racial leader)
+
+        explicit PvpCredit() : ServerPacket(SMSG_PVP_CREDIT) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    struct ForcedReactionEntry
+    {
+        uint32 factionId = 0;       // Faction ID (Faction.dbc)
+        uint32 reputationRank = 0;  // Reputation rank
+    };
+
+    class SetForcedReactions final : public ServerPacket
+    {
+    public:
+        std::vector<ForcedReactionEntry> forcedReactions;
+
+        explicit SetForcedReactions() : ServerPacket(SMSG_SET_FORCED_REACTIONS) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    struct FactionStandingEntry
+    {
+        uint32 reputationListId = 0; // Reputation list ID
+        int32 standing = 0;          // Reputation standing
+    };
+
+    class SetFactionStanding final : public ServerPacket  // last check 2.4.0
+    {
+    public:
+        std::vector<FactionStandingEntry> factionStandings;
+
+        explicit SetFactionStanding() : ServerPacket(SMSG_SET_FACTION_STANDING) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    struct FactionInitEntry
+    {
+        uint8 flags = 0;    // Faction flags
+        int32 standing = 0; // Reputation standing
+    };
+
+    class InitializeFactions final : public ServerPacket
+    {
+    public:
+        static constexpr uint32 MAX_FACTION_COUNT = 64;
+        std::array<FactionInitEntry, MAX_FACTION_COUNT> factions;
+
+        explicit InitializeFactions() : ServerPacket(SMSG_INITIALIZE_FACTIONS) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class SetFactionVisible final : public ServerPacket
+    {
+    public:
+        uint32 reputationListId = 0;
+
+        explicit SetFactionVisible() : ServerPacket(SMSG_SET_FACTION_VISIBLE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PlayMusic final : public ServerPacket
+    {
+    public:
+        uint32 musicId = 0;
+
+        explicit PlayMusic() : ServerPacket(SMSG_PLAY_MUSIC) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PlaySound final : public ServerPacket
+    {
+    public:
+        uint32 soundId = 0;
+
+        explicit PlaySound() : ServerPacket(SMSG_PLAY_SOUND) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class Notification final : public ServerPacket
+    {
+    public:
+        std::string message; // Notification message
+
+        explicit Notification() : ServerPacket(SMSG_NOTIFICATION) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
+    /** Tell a client to invalidate all cached entries for a given player (like the name) */
+    class InvalidatePlayer final : public ServerPacket
+    {
+    public:
+        ObjectGuid playerGuid;
+
+        explicit InvalidatePlayer() : ServerPacket(SMSG_INVALIDATE_PLAYER) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+    class AiReaction final : public ServerPacket
+    {
+    public:
+        ObjectGuid unitGuid;
+        uint32 reaction = 0; // AIReactionType enum value
+
+        explicit AiReaction() : ServerPacket(SMSG_AI_REACTION) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class ZoneUnderAttack final : public ServerPacket
+    {
+    public:
+        uint32 areaId = 0; // area id that is under attack
+
+        explicit ZoneUnderAttack() : ServerPacket(SMSG_ZONE_UNDER_ATTACK) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PlayObjectSound final : public ServerPacket
+    {
+    public:
+        uint32 soundId = 0;
+        ObjectGuid sourceGuid; // object that is playing the sound
+
+        explicit PlayObjectSound() : ServerPacket(SMSG_PLAY_OBJECT_SOUND) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class GameObjectSpawnAnim final : public ServerPacket
+    {
+    public:
+        ObjectGuid gameObjectGuid;
+
+        explicit GameObjectSpawnAnim() : ServerPacket(SMSG_GAMEOBJECT_SPAWN_ANIM) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class GameObjectDespawnAnim final : public ServerPacket
+    {
+    public:
+        ObjectGuid gameObjectGuid;
+
+        explicit GameObjectDespawnAnim() : ServerPacket(SMSG_GAMEOBJECT_DESPAWN_ANIM) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class StartMirrorTimer final : public ServerPacket
+    {
+    public:
+        uint32 timerType = 0;   // mirror timer type (breath, fatigue, environmental)
+        uint32 remaining = 0;   // remaining time in ms
+        uint32 duration = 0;    // full timer duration in ms
+        int32 scale = 0;        // rate of change (-1 = decreasing, 10 = increasing)
+        bool paused = false;
+        uint32 spellId = 0;     // spell causing the timer (nullptr if no spell)
+
+        explicit StartMirrorTimer() : ServerPacket(SMSG_START_MIRROR_TIMER) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class StopMirrorTimer final : public ServerPacket
+    {
+    public:
+        uint32 timerType = 0; // mirror timer type to stop
+
+        explicit StopMirrorTimer() : ServerPacket(SMSG_STOP_MIRROR_TIMER) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    // Note: Default UI handler for this is bugged, args don't match.
+    // Use StartMirrorTimer (SMSG_START_MIRROR_TIMER) to avoid lua errors.
+    class PauseMirrorTimer final : public ServerPacket
+    {
+    public:
+        uint32 timerType = 0; // mirror timer type to pause/unpause
+        bool paused = false;
+
+        explicit PauseMirrorTimer() : ServerPacket(SMSG_PAUSE_MIRROR_TIMER) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    struct TransferPendingTransportInfo
+    {
+        TransferPendingTransportInfo(uint32 transport, uint32 map) : transportEntry(transport), oldMapId(map) {};
+        uint32 transportEntry = 0;
+        uint32 oldMapId = 0;
+    };
+
+    class TransferPending final : public ServerPacket
+    {
+    public:
+        uint32 mapId = 0;
+        nonstd::optional<TransferPendingTransportInfo> transportInfo;
+
+        explicit TransferPending() : ServerPacket(SMSG_TRANSFER_PENDING) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class NewWorld final : public ServerPacket
+    {
+    public:
+        WorldLocation location;
+
+        explicit NewWorld() : ServerPacket(SMSG_NEW_WORLD) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class LogXpGain final : public ServerPacket
+    {
+    public:
+        ObjectGuid victimGuid;   // empty if non-kill xp
+        uint32 totalXp = 0;      // total xp given (including rested bonus)
+        uint8 xpType = 0;        // 0=kill xp, 1=non-kill xp
+        uint32 baseXp = 0;       // xp without rested bonus (only if kill xp)
+        float groupBonus = 1.0f; // group bonus factor (1=none, 0=100% group bonus; only if kill xp)
+
+        explicit LogXpGain() : ServerPacket(SMSG_LOG_XPGAIN) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class LevelUpInfo final : public ServerPacket
+    {
+    public:
+        uint32 level = 0;
+        uint32 healthGain = 0;
+        uint32 powerGains[5] = {}; // up to 5 powers
+        uint32 statGains[5] = {};  // stat gains for STRENGTH..SPIRIT
+
+        explicit LevelUpInfo() : ServerPacket(SMSG_LEVELUP_INFO) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class TriggerCinematic final : public ServerPacket
+    {
+    public:
+        uint32 cinematicSequenceId = 0;
+
+        explicit TriggerCinematic() : ServerPacket(SMSG_TRIGGER_CINEMATIC) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PlayerSkinned final : public ServerPacket
+    {
+    public:
+        uint8 freeRepop = 0; // always 0 (whether player can repop for free)
+
+        explicit PlayerSkinned() : ServerPacket(SMSG_PLAYER_SKINNED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    // SMSG_DURABILITY_DAMAGE_DEATH: empty body; sent when player loses durability on death
+    class DurabilityDamageDeath final : public ServerPacket
+    {
+    public:
+        explicit DurabilityDamageDeath() : ServerPacket(SMSG_DURABILITY_DAMAGE_DEATH) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    // SMSG_CANCEL_AUTO_REPEAT: empty body; tells client to cancel auto-repeat
+    class CancelAutoRepeat final : public ServerPacket
+    {
+    public:
+        explicit CancelAutoRepeat() : ServerPacket(SMSG_CANCEL_AUTO_REPEAT) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class ExplorationExperience final : public ServerPacket
+    {
+    public:
+        uint32 areaId = 0;
+        uint32 experience = 0;
+
+        explicit ExplorationExperience() : ServerPacket(SMSG_EXPLORATION_EXPERIENCE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
+    class FactionAtWarChange final : public ServerPacket
+    {
+    public:
+        uint32 reputationId = 0;
+        uint8 flags = 0; // FACTION_FLAG_AT_WAR or 0 to clear
+
+        explicit FactionAtWarChange() : ServerPacket(SMSG_SET_FACTION_ATWAR) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
+    class InstanceReset final : public ServerPacket
+    {
+    public:
+        uint32 mapId = 0;
+
+        explicit InstanceReset() : ServerPacket(SMSG_INSTANCE_RESET) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class InstanceResetFailed final : public ServerPacket
+    {
+    public:
+        uint32 reason = 0; // InstanceResetFailReason enum value
+        uint32 mapId = 0;
+
+        explicit InstanceResetFailed() : ServerPacket(SMSG_INSTANCE_RESET_FAILED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+    class MountResult final : public ServerPacket
+    {
+    public:
+        uint32 result = 0; // UnitMountResult enum value
+
+        explicit MountResult() : ServerPacket(SMSG_MOUNTRESULT) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class DismountResult final : public ServerPacket
+    {
+    public:
+        uint32 result = 0; // UnitDismountResult enum value
+
+        explicit DismountResult() : ServerPacket(SMSG_DISMOUNTRESULT) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class RaidGroupOnly final : public ServerPacket
+    {
+    public:
+        uint32 timer = 0;     // countdown timer; 0 means show error immediately
+        uint32 errorCode = 0; // error used only when timer = 0
+
+        explicit RaidGroupOnly() : ServerPacket(SMSG_RAID_GROUP_ONLY) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class SetRestStart final : public ServerPacket
+    {
+    public:
+        uint32 restStateTime = 0; // rest state time (always 0 in original code)
+
+        explicit SetRestStart() : ServerPacket(SMSG_SET_REST_START) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class BindpointUpdate final : public ServerPacket
+    {
+    public:
+        WorldLocation location;
+        uint32 areaId = 0;
+
+        explicit BindpointUpdate() : ServerPacket(SMSG_BINDPOINTUPDATE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PlayerBound final : public ServerPacket
+    {
+    public:
+        ObjectGuid binderGuid;
+        uint32 areaId = 0;
+
+        explicit PlayerBound() : ServerPacket(SMSG_PLAYERBOUND) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class LoginSetTimeSpeed final : public ServerPacket
+    {
+    public:
+        uint32 gameTime = 0;
+        float gameSpeedMinutesPerSecond = 0.0f; // game speed
+
+        explicit LoginSetTimeSpeed() : ServerPacket(SMSG_LOGIN_SETTIMESPEED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class TransferAborted final : public ServerPacket
+    {
+    public:
+        uint8 reason = 0; // transfer abort reason
+
+        explicit TransferAborted() : ServerPacket(SMSG_TRANSFER_ABORTED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
+    class RaidInstanceMessage final : public ServerPacket
+    {
+    public:
+        uint32 messageType = 0; // type of warning (RAID_INSTANCE_WELCOME, etc.)
+        uint32 mapId = 0;
+        uint32 resetTime = 0;   // time in seconds until reset
+
+        explicit RaidInstanceMessage() : ServerPacket(SMSG_RAID_INSTANCE_MESSAGE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+    class SummonRequest final : public ServerPacket
+    {
+    public:
+        ObjectGuid summonerGuid;
+        uint32 zoneId = 0;           // summoner's zone
+        uint32 autoDeclineDelay = 0; // time in ms before auto decline
+
+        explicit SummonRequest() : ServerPacket(SMSG_SUMMON_REQUEST) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class CorpseReclaimDelay final : public ServerPacket
+    {
+    public:
+        uint32 delayMs = 0; // delay in milliseconds before corpse can be reclaimed
+
+        explicit CorpseReclaimDelay() : ServerPacket(SMSG_CORPSE_RECLAIM_DELAY) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
+    class UpdateInstanceOwnership final : public ServerPacket
+    {
+    public:
+        uint32 hasBeenSaved = 0; // whether the player has any permanent instance binds
+
+        explicit UpdateInstanceOwnership() : ServerPacket(SMSG_UPDATE_INSTANCE_OWNERSHIP) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class UpdateLastInstance final : public ServerPacket
+    {
+    public:
+        uint32 mapId = 0; // map id of the last visited instance
+
+        explicit UpdateLastInstance() : ServerPacket(SMSG_UPDATE_LAST_INSTANCE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+    // SMSG_EMOTE: sent to broadcast a unit's emote animation to nearby clients
+    class EmoteNotify final : public ServerPacket
+    {
+    public:
+        uint32 emoteId = 0;
+        ObjectGuid unitGuid;
+
+        explicit EmoteNotify() : ServerPacket(SMSG_EMOTE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
+    class ClientControlUpdate final : public ServerPacket
+    {
+    public:
+        ObjectGuid moverGuid; // guid of the unit the player should control
+        uint8 allowMove = 0;  // whether movement is allowed
+
+        explicit ClientControlUpdate() : ServerPacket(SMSG_CLIENT_CONTROL_UPDATE) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+#endif
+
+    class UpdateWorldState final : public ServerPacket
+    {
+    public:
+        uint32 field = 0;  // world state field id (will be uint16 on older clients)
+        uint32 value = 0;  // new value (will be uint16 on older clients)
+
+        explicit UpdateWorldState() : ServerPacket(SMSG_UPDATE_WORLD_STATE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 

@@ -33,13 +33,14 @@
 #include "BattleGround.h"
 #include "MapManager.h"
 #include "MapPersistentStateMgr.h"
-#include "Util.h"
 #include "LootMgr.h"
 #include "LFGMgr.h"
 #include "LFGQueue.h"
 #include "UpdateMask.h"
+#include "Utilities/Random.h"
 
 #include <array>
+
 
 GroupMemberStatus GetGroupMemberStatus(Player const* member = nullptr)
 {
@@ -376,7 +377,6 @@ bool Group::AddMember(ObjectGuid guid, char const* name, uint8 joinMethod)
         {
             // Broadcast new player group member fields to rest of the group
             UpdateData groupData;
-            WorldPacket groupDataPacket;
 
             // Broadcast group members' fields to player
             for (GroupReference* itr = GetFirstMember(); itr != nullptr; itr = itr->next())
@@ -404,23 +404,15 @@ bool Group::AddMember(ObjectGuid guid, char const* name, uint8 joinMethod)
                         {
                             UpdateData newData;
                             player->BuildValuesUpdateBlockForPlayer(newData, updateMask, member);
-
                             if (newData.HasData())
-                            {
-                                WorldPacket newDataPacket;
-                                newData.BuildPacket(&newDataPacket);
-                                member->SendDirectMessage(&newDataPacket);
-                            }
+                                newData.Send(member->GetSession());
                         }
                     }
                 }
             }
 
             if (groupData.HasData())
-            {
-                groupData.BuildPacket(&groupDataPacket);
-                player->SendDirectMessage(&groupDataPacket);
-            }
+                groupData.Send(player->GetSession());
         }
 
         if (IsInLFG())
@@ -460,18 +452,14 @@ uint32 Group::RemoveMember(ObjectGuid guid, uint8 removeMethod)
 
                 if (IsInLFG())
                 {
-                    WorldPackets::Misc::MeetingstoneSetQueue packet;
-                    packet.areaId = 0;
+                    auto packet = std::make_unique<WorldPackets::Misc::MeetingstoneSetQueue>();
+                    packet->areaId = 0;
 #if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_4_2
-                    packet.idempotencyToken = 0;
+                    packet->idempotencyToken = 0;
 #else
-                    packet.status = MEETINGSTONE_STATUS_PARTY_MEMBER_REMOVED_PARTY_REMOVED;
+                    packet->status = MEETINGSTONE_STATUS_PARTY_MEMBER_REMOVED_PARTY_REMOVED;
 #endif
-                    // TODO Use broadcaster which does the binary conversion automatically
-                    WorldPacket data;
-                    data.SetOpcode(packet.GetOpcode());
-                    packet.AppendBodyTo(data);
-                    BroadcastPacket(&data, true);
+                    BroadcastPacket(std::move(packet), true);
 
                     leftGroup = true;
                     sWorld.GetLFGQueue().GetMessager().AddMessage([groupId = GetId()](LFGQueue* queue)
@@ -492,18 +480,14 @@ uint32 Group::RemoveMember(ObjectGuid guid, uint8 removeMethod)
 
                 if (!leaderChanged)
                 {
-                    WorldPackets::Misc::MeetingstoneSetQueue packet;
-                    packet.areaId = m_LFGAreaId;
+                    auto packet = std::make_unique<WorldPackets::Misc::MeetingstoneSetQueue>();
+                    packet->areaId = m_LFGAreaId;
 #if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_4_2
-                    packet.idempotencyToken = 0;
+                    packet->idempotencyToken = 0;
 #else
-                    packet.status = MEETINGSTONE_STATUS_PARTY_MEMBER_LEFT_LFG;
+                    packet->status = MEETINGSTONE_STATUS_PARTY_MEMBER_LEFT_LFG;
 #endif
-                    // TODO Use broadcaster which does the binary conversion automatically
-                    WorldPacket data;
-                    data.SetOpcode(packet.GetOpcode());
-                    packet.AppendBodyTo(data);
-                    BroadcastPacket(&data, true);
+                    BroadcastPacket(std::move(packet), true);
                 }
             }
 
@@ -511,12 +495,7 @@ uint32 Group::RemoveMember(ObjectGuid guid, uint8 removeMethod)
             if (Group* group = player->GetGroup())
                 group->SendUpdate();
             else
-            {
-                WorldPacket data;
-                data.Initialize(SMSG_GROUP_LIST, 24);
-                data << uint64(0) << uint64(0) << uint64(0);
-                player->GetSession()->SendPacket(&data);
-            }
+                player->GetSession()->SendPacket(std::make_unique<WorldPackets::Group::GroupList>()); // default packet = not in group
 
             _homebindIfInstance(player);
         }
@@ -525,9 +504,9 @@ uint32 Group::RemoveMember(ObjectGuid guid, uint8 removeMethod)
         {
             leftGroup = true;
 
-            WorldPacket data(SMSG_GROUP_SET_LEADER, (m_leaderName.size() + 1));
-            data << m_leaderName;
-            BroadcastPacket(&data, true);
+            auto packet = std::make_unique<WorldPackets::Group::GroupSetLeaderNotification>();
+            packet->leaderName = m_leaderName;
+            BroadcastPacket(std::move(packet), true);
 
             sWorld.GetLFGQueue().GetMessager().AddMessage([groupId = GetId()](LFGQueue* queue)
             {
@@ -555,9 +534,9 @@ void Group::ChangeLeader(ObjectGuid guid)
 
     _setLeader(guid);
 
-    WorldPacket data(SMSG_GROUP_SET_LEADER, slot->name.size() + 1);
-    data << slot->name;
-    BroadcastPacket(&data, true);
+    auto packet = std::make_unique<WorldPackets::Group::GroupSetLeaderNotification>();
+    packet->leaderName = slot->name;
+    BroadcastPacket(std::move(packet), true);
     SendUpdate();
 }
 
@@ -594,20 +573,15 @@ void Group::Disband(bool hideDestroy, ObjectGuid initiator)
             }, 1);
         }
 
-        WorldPacket data;
         if (!hideDestroy)
-        {
             player->GetSession()->SendPacket(std::make_unique<WorldPackets::Group::GroupDestroyed>());
-        }
 
         //we already removed player from group and in player->GetGroup() is his original group, send update
         if (Group* group = player->GetGroup())
             group->SendUpdate();
         else
         {
-            data.Initialize(SMSG_GROUP_LIST, 24);
-            data << uint64(0) << uint64(0) << uint64(0);
-            player->GetSession()->SendPacket(&data);
+            player->GetSession()->SendPacket(std::make_unique<WorldPackets::Group::GroupList>()); // default packet = not in group
 
             if (IsInLFG())
                 player->GetSession()->SendMeetingstoneSetqueue(0, MEETINGSTONE_STATUS_NONE);
@@ -782,8 +756,7 @@ void Group::SendLootStartRoll(uint32 CountDown, Roll const& r)
 
     // TODO Use broadcaster which does the binary conversion automatically
     WorldPacket data;
-    data.SetOpcode(packet->GetOpcode());
-    packet->AppendBodyTo(data);
+    packet->WritePacket(data);
 
     for (const auto& itr : r.playerVote)
     {
@@ -812,8 +785,7 @@ void Group::SendLootRoll(ObjectGuid const& targetGuid, uint8 rollNumber, uint8 r
 
     // TODO Use broadcaster which does the binary conversion automatically
     WorldPacket data;
-    data.SetOpcode(packet->GetOpcode());
-    packet->AppendBodyTo(data);
+    packet->WritePacket(data);
 
     for (const auto& itr : r.playerVote)
     {
@@ -840,8 +812,7 @@ void Group::SendLootRollWon(ObjectGuid const& targetGuid, uint8 rollNumber, Roll
 
     // TODO Use broadcaster which does the binary conversion automatically
     WorldPacket data;
-    data.SetOpcode(packet->GetOpcode());
-    packet->AppendBodyTo(data);
+    packet->WritePacket(data);
 
     for (const auto& itr : r.playerVote)
     {
@@ -865,8 +836,7 @@ void Group::SendLootAllPassed(Roll const& r)
 
     // TODO Use broadcaster which does the binary conversion automatically
     WorldPacket data;
-    data.SetOpcode(packet->GetOpcode());
-    packet->AppendBodyTo(data);
+    packet->WritePacket(data);
 
     for (const auto& itr : r.playerVote)
     {
@@ -936,10 +906,8 @@ void Group::MasterLoot(Creature* creature, Loot* loot, Player* player)
             i.is_underthreshold = 1;
     }
 
-    uint32 playerCount = 0;
-
-    WorldPacket data(SMSG_LOOT_MASTER_LIST, 330);
-    data << uint8(0);
+    auto packet = std::make_unique<WorldPackets::Group::LootMasterList>();
+    packet->eligibleLooters.reserve(GetMembersCount());
 
     for (GroupReference* itr = GetFirstMember(); itr != nullptr; itr = itr->next())
     {
@@ -949,13 +917,11 @@ void Group::MasterLoot(Creature* creature, Loot* loot, Player* player)
 
         if (looter->IsWithinLootXPDist(creature) && loot->IsAllowedLooter(looter->GetObjectGuid(), false))
         {
-            data << looter->GetObjectGuid();
-            ++playerCount;
+            packet->eligibleLooters.push_back(looter->GetObjectGuid());
         }
     }
 
-    data.put<uint8>(0, playerCount);
-    player->GetSession()->SendPacket(&data);
+    player->GetSession()->SendPacket(std::move(packet));
 }
 
 bool Group::CountRollVote(Player* player, ObjectGuid const& lootedTarget, uint32 itemSlot, RollVote vote)
@@ -1141,12 +1107,14 @@ void Group::CountSingleLooterRoll(Roll* roll)
                 player->GetShortDescription().c_str(), item->count, item->itemid, roll->lootedTargetGUID.GetString().c_str());
             if (Item* newItem = player->StoreNewItem(dest, roll->itemid, true, item->randomPropertyId))
                 player->OnReceivedItem(newItem);
+            if (roll->getLoot()->isLooted())
+                player->GetSession()->DoLootRelease(roll->getLoot()->GetLootTarget()->GetObjectGuid());
         }
         else
         {
             item->is_blocked = false;
             item->lootOwner = playerGuid;
-            player->SendEquipError(msg, nullptr, nullptr, roll->itemid);
+            player->SendEquipError(msg, nullptr, nullptr, 0, roll->itemid);
         }
     }
 
@@ -1202,12 +1170,14 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
                              player->GetShortDescription().c_str(), item->count, item->itemid, roll->lootedTargetGUID.GetString().c_str());
                     if (Item* newItem = player->StoreNewItem(dest, roll->itemid, true, item->randomPropertyId))
                         player->OnReceivedItem(newItem);
+                    if (roll->getLoot()->isLooted())
+                        player->GetSession()->DoLootRelease(roll->getLoot()->GetLootTarget()->GetObjectGuid());
                 }
                 else
                 {
                     item->is_blocked = false;
                     item->lootOwner = maxguid;
-                    player->SendEquipError(msg, nullptr, nullptr, roll->itemid);
+                    player->SendEquipError(msg, nullptr, nullptr, 0, roll->itemid);
                 }
             }
             else
@@ -1253,11 +1223,13 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
                              player->GetShortDescription().c_str(), item->count, item->itemid, roll->lootedTargetGUID.GetString().c_str());
                     if (Item* newItem = player->StoreNewItem(dest, roll->itemid, true, item->randomPropertyId))
                         player->OnReceivedItem(newItem);
+                    if (roll->getLoot()->isLooted())
+                        player->GetSession()->DoLootRelease(roll->getLoot()->GetLootTarget()->GetObjectGuid());
                 }
                 else
                 {
                     item->is_blocked = false;
-                    player->SendEquipError(msg, nullptr, nullptr, roll->itemid);
+                    player->SendEquipError(msg, nullptr, nullptr, 0, roll->itemid);
                 }
             }
         }
@@ -1286,15 +1258,10 @@ void Group::SetTargetIcon(uint8 id, ObjectGuid targetGuid)
     m_targetIcons[id] = targetGuid;
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
-    WorldPackets::Group::RaidTargetUpdateDelta deltaPacket;
-    deltaPacket.iconId = id;
-    deltaPacket.targetGuid = targetGuid;
-
-    // TODO Use broadcaster which does the binary conversion automatically
-    WorldPacket data;
-    data.SetOpcode(deltaPacket.GetOpcode());
-    deltaPacket.AppendBodyTo(data);
-    BroadcastPacket(&data, true);
+    auto deltaPacket = std::make_unique<WorldPackets::Group::RaidTargetUpdateDelta>();
+    deltaPacket->iconId = id;
+    deltaPacket->targetGuid = targetGuid;
+    BroadcastPacket(std::move(deltaPacket), true);
 #endif
 }
 
@@ -1354,19 +1321,20 @@ void Group::SendTargetIconList(WorldSession* session)
     if (!session)
         return;
 
-    WorldPacket data(MSG_RAID_TARGET_UPDATE, (1 + TARGET_ICON_COUNT * 9));
-    data << uint8(1); // 1 - full icon list, 0 - delta update
-
+    auto packet = std::make_unique<WorldPackets::Group::RaidTargetUpdateAll>();
+    packet->icons.reserve(TARGET_ICON_COUNT);
     for (int i = 0; i < TARGET_ICON_COUNT; ++i)
     {
         if (!m_targetIcons[i])
             continue;
 
-        data << uint8(i);
-        data << m_targetIcons[i];
+        WorldPackets::Group::RaidTargetUpdateAll::IconEntry entry;
+        entry.iconId = i;
+        entry.targetGuid = m_targetIcons[i];
+        packet->icons.push_back(entry);
     }
 
-    session->SendPacket(&data);
+    session->SendPacket(std::move(packet));
 #endif
 }
 
@@ -1374,7 +1342,7 @@ void Group::SendUpdate()
 {
     // sending full group list update clears marked targets when not in a raid, so we need to resend them
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
-    std::unique_ptr<WorldPacket> markedTargets;
+    std::shared_ptr<WorldPackets::Group::RaidTargetUpdateAll> markedTargets;
     if (!isRaidGroup())
     {
         for (int i = 0; i < TARGET_ICON_COUNT; ++i)
@@ -1383,13 +1351,12 @@ void Group::SendUpdate()
                 continue;
 
             if (!markedTargets)
-            {
-                markedTargets = std::make_unique<WorldPacket>(MSG_RAID_TARGET_UPDATE, (1 + TARGET_ICON_COUNT * 9));
-                *markedTargets << uint8(1); // 1 - full icon list, 0 - delta update
-            }
+                markedTargets = std::make_shared<WorldPackets::Group::RaidTargetUpdateAll>();
 
-            *markedTargets << uint8(i);
-            *markedTargets << m_targetIcons[i];
+            WorldPackets::Group::RaidTargetUpdateAll::IconEntry entry;
+            entry.iconId = i;
+            entry.targetGuid = m_targetIcons[i];
+            markedTargets->icons.push_back(entry);
         }
     }
 #endif
@@ -1400,46 +1367,45 @@ void Group::SendUpdate()
         if (!player || player->GetGroup() != this)
             continue;
 
-        // guess size
-        WorldPacket data(SMSG_GROUP_LIST, (1 + 1 + 1 + 4 + GetMembersCount() * 20) + 8 + 1 + 8 + 1);
-        data << (uint8)m_groupType;                         // group type
-        data << (uint8)(citr->group | (citr->assistant ? 0x80 : 0)); // own flags (groupid | (assistant?0x80:0))
+        auto packet = std::make_unique<WorldPackets::Group::GroupList>();
+        packet->groupType = m_groupType;                              // group type
+        packet->ownGroupAndAssistantFlag = uint8(citr->group | (citr->assistant ? 0x80 : 0)); // own flags (groupid | (assistant?0x80:0))
 
-        uint32 count = 0;
-        size_t countPos = data.wpos();
-        data << uint32(0);
+        packet->members.reserve(m_memberSlots.size());
         for (const auto& itr : m_memberSlots)
         {
             if (citr->guid == itr.guid)
                 continue;
 
-            data << itr.name;
-            data << itr.guid;
-            data << uint8(GetGroupMemberStatus(sObjectMgr.GetPlayer(itr.guid)));
-            data << (uint8)(itr.group | (itr.assistant ? 0x80 : 0));
-            count++;
+            WorldPackets::Group::GroupList::Member member;
+            member.name = itr.name;
+            member.guid = itr.guid;
+            member.onlineStatus = GetGroupMemberStatus(sObjectMgr.GetPlayer(itr.guid));
+            member.groupAndAssistantFlag = uint8(itr.group | (itr.assistant ? 0x80 : 0));
+            packet->members.push_back(std::move(member));
         }
-        data.put<uint32>(countPos, count);
 
-        data << m_leaderGuid;                               // leader guid
-        if (count)
+        packet->leaderGuid = m_leaderGuid;                            // leader guid
+        if (!packet->members.empty())
         {
-            data << uint8(m_lootMethod);                    // loot method
+            packet->lootMethod = m_lootMethod;                        // loot method
             if (GetLootMethod() == MASTER_LOOT)
-                data << m_looterGuid;                       // looter guid
-            else
-                data << uint64(0);
-            data << uint8(m_lootThreshold);                 // loot threshold
+                packet->looterGuid = m_looterGuid;                    // looter guid
+            packet->lootThreshold = m_lootThreshold;                  // loot threshold
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
-            data << uint8(0);                               // dungeon difficulty
+            packet->dungeonDifficulty = 0;                            // dungeon difficulty
 #endif
         }
-        player->GetSession()->SendPacket(&data);
+        player->GetSession()->SendPacket(std::move(packet));
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
         if (markedTargets)
-            player->GetSession()->SendPacket(markedTargets.get());
+        {
+            // TODO Queue `ServerPacket` directly to multiple sessions without serializing twice
+            auto copy = std::make_unique<WorldPackets::Group::RaidTargetUpdateAll>(*markedTargets);
+            player->GetSession()->SendPacket(std::move(copy));
+        }
 #endif
     }
 }
@@ -1505,7 +1471,15 @@ void Group::UpdateOfflineLeader(time_t time, uint32 delay)
     _chooseLeader(true);
 }
 
-void Group::BroadcastPacket(WorldPacket* packet, bool ignorePlayersInBGRaid, int group, ObjectGuid ignore)
+void Group::BroadcastPacket(std::unique_ptr<ServerPacket> packet, bool ignorePlayersInBGRaid, int raidSubGroup, ObjectGuid ignore)
+{
+    // TODO Use broadcaster/scheduler which does the binary conversion automatically
+    WorldPacket data;
+    packet->WritePacket(data);
+    BroadcastPacket(&data, ignorePlayersInBGRaid, raidSubGroup, ignore);
+}
+
+void Group::BroadcastPacket(WorldPacket* packet, bool ignorePlayersInBGRaid, int raidSubGroup, ObjectGuid ignore)
 {
     for (GroupReference* itr = GetFirstMember(); itr != nullptr; itr = itr->next())
     {
@@ -1513,7 +1487,7 @@ void Group::BroadcastPacket(WorldPacket* packet, bool ignorePlayersInBGRaid, int
         if (!pl || (ignore && pl->GetObjectGuid() == ignore) || (ignorePlayersInBGRaid && pl->GetGroup() != this))
             continue;
 
-        if (group == -1 || itr->getSubGroup() == group)
+        if (raidSubGroup == -1 || itr->getSubGroup() == raidSubGroup)
             pl->GetSession()->SendPacket(packet);
     }
 }

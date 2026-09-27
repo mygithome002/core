@@ -3,6 +3,8 @@
 
 #include "Packet.h"
 #include "ObjectGuid.h"
+#include "DamageStructs.h"
+#include "nonstd/optional.hpp"
 
 namespace WorldPackets { namespace Combat
 {
@@ -29,6 +31,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit AttackSwingNotInRange() : ServerPacket(SMSG_ATTACKSWING_NOTINRANGE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -36,6 +39,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit AttackSwingNotStanding() : ServerPacket(SMSG_ATTACKSWING_NOTSTANDING) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -43,6 +47,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit AttackSwingDeadTarget() : ServerPacket(SMSG_ATTACKSWING_DEADTARGET) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -50,6 +55,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit AttackSwingCantAttack() : ServerPacket(SMSG_ATTACKSWING_CANT_ATTACK) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -57,6 +63,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit CancelCombat() : ServerPacket(SMSG_CANCEL_COMBAT) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -64,6 +71,7 @@ namespace WorldPackets { namespace Combat
     {
     public:
         explicit AttackSwingBadFacing() : ServerPacket(SMSG_ATTACKSWING_BADFACING) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 
@@ -75,6 +83,102 @@ namespace WorldPackets { namespace Combat
         bool isDead = false;
 
         explicit AttackStop() : ServerPacket(SMSG_ATTACKSTOP) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class AttackStart final : public ServerPacket
+    {
+    public:
+        ObjectGuid attackerGuid;
+        ObjectGuid victimGuid;
+
+        explicit AttackStart() : ServerPacket(SMSG_ATTACKSTART) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class PartyKillLog final : public ServerPacket
+    {
+    public:
+        ObjectGuid killerGuid; // player with the killing blow
+        ObjectGuid victimGuid;
+
+        explicit PartyKillLog() : ServerPacket(SMSG_PARTYKILLLOG) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class EnvironmentalDamageLog final : public ServerPacket
+    {
+    public:
+        ObjectGuid victimGuid;
+        uint8 damageType = 0; // type of environmental damage
+        uint32 damage = 0;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_6_1
+        uint32 absorb = 0;
+        int32 resist = 0;
+#endif
+
+        explicit EnvironmentalDamageLog() : ServerPacket(SMSG_ENVIRONMENTALDAMAGELOG) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    // SMSG_FEIGN_DEATH_RESISTED: empty body; sent when feign death is resisted
+    class FeignDeathResisted final : public ServerPacket
+    {
+    public:
+        explicit FeignDeathResisted() : ServerPacket(SMSG_FEIGN_DEATH_RESISTED) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class SpellDamageShield final : public ServerPacket
+    {
+    public:
+        ObjectGuid victimGuid;  // unit that has the shield aura
+        ObjectGuid attackerGuid; // unit that attacked the shield bearer
+        uint32 damage = 0;
+        uint32 school = 0;  // spell school of the shield damage
+
+        explicit SpellDamageShield() : ServerPacket(SMSG_SPELLDAMAGESHIELD) {}
+        size_t EstimateFinalSize() const override;
+        void AppendBodyTo(ByteBuffer& buffer) const override;
+    };
+
+    class MeleeAttackingStateUpdate final : public ServerPacket
+    {
+    public:
+        uint32 hitInfo = 0;
+        ObjectGuid attackerGuid;
+        ObjectGuid victimGuid;
+        int32 totalDamage = 0;
+        std::vector<SubDamageInfo> subDamage;
+        uint32 victimState = 0;
+        uint32 attackerState = 0;
+        uint32 meleeSpellDamage = 0;
+        uint32 meleeSpellId = 0;
+        int32 blockedAmount = 0;
+
+        struct DebugMeleeAttackingStateInfo
+        {
+            uint32 armor = 0;
+            float critChance = 0;
+            float combatRoll = 0;
+            float missChance = 0;
+            float dodgeChance = 0;
+            float parryChance = 0;
+            float blockChance = 0;
+            float glanceChance = 0;
+            float crushChance = 0;
+            std::pair<float /*min*/, float /*max*/> damage[5] = {};
+            uint32 debugField10 = 0;
+        };
+        nonstd::optional<DebugMeleeAttackingStateInfo> debugInfo;
+
+        explicit MeleeAttackingStateUpdate() : ServerPacket(SMSG_ATTACKERSTATEUPDATE) {}
+        size_t EstimateFinalSize() const override;
         void AppendBodyTo(ByteBuffer& buffer) const override;
     };
 

@@ -667,6 +667,8 @@ ChatCommand * ChatHandler::getCommandTable()
         { "info",           SEC_MODERATOR,      false, &ChatHandler::HandleNpcSpawnInfoCommand,        "", nullptr },
         { "set",            SEC_DEVELOPER,      false, nullptr,                                        "", creatureSpawnsSetCommandTable },
         { "move",           SEC_DEVELOPER,      false, &ChatHandler::HandleNpcSpawnMoveCommand,        "", nullptr },
+        { "load",           SEC_GAMEMASTER,     false, &ChatHandler::HandleNpcSpawnLoadCommand,        "", nullptr },
+        { "unload",         SEC_GAMEMASTER,     false, &ChatHandler::HandleNpcSpawnUnloadCommand,      "", nullptr },
         { nullptr,          0,                  false, nullptr,                                        "", nullptr }
     };
 
@@ -4038,14 +4040,14 @@ std::string ChatHandler::PrepareStringNpcOrGoSpawnInformation(uint32 guid)
         {
             char buffer[100];
             char const* format = GetMangosString(LANG_NPC_GO_INFO_POOL_EVENT_STRING);
-            sprintf(buffer, format, pool_id, event_id);
+            snprintf(buffer, sizeof(buffer), format, pool_id, event_id);
             str = buffer;
         }
         else
         {
             char buffer[100];
             char const* format = GetMangosString(LANG_NPC_GO_INFO_POOL_STRING);
-            sprintf(buffer, format, pool_id);
+            snprintf(buffer, sizeof(buffer), format, pool_id);
             str = buffer;
         }
     }
@@ -4053,7 +4055,7 @@ std::string ChatHandler::PrepareStringNpcOrGoSpawnInformation(uint32 guid)
     {
         char buffer[100];
         char const* format = GetMangosString(LANG_NPC_GO_INFO_EVENT_STRING);
-        sprintf(buffer, format, event_id);
+        snprintf(buffer, sizeof(buffer), format, event_id);
         str = buffer;
     }
 

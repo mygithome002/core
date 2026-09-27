@@ -36,12 +36,14 @@ set (shared_SRCS
     ThreadSpecificPtr.h
     ThreadSpecificPtr.cpp
     Timer.h
+    Utilities/Random.h
     Util.h
-    WheatyExceptionReport.h
     Config/Config.h
     Config/ConfigEnv.h
     Crypto/BigNumber.h
     Crypto/BigNumber.cpp
+    Crypto/CryptoUtils.h
+    Crypto/CryptoUtils.cpp
     Crypto/InitializeCrypto.h
     Crypto/InitializeCrypto.cpp
     Crypto/Authentication/SRP6.h
@@ -63,15 +65,12 @@ set (shared_SRCS
     Database/DatabaseEnv.h
     Database/DatabaseImpl.h
     Database/DatabaseMysql.h
-    Database/DatabasePostgre.h
     Database/DBCFileLoader.h
     Database/DBCStore.h
     Database/Field.h
     Database/MySQLDelayThread.h
-    Database/PGSQLDelayThread.h
     Database/QueryResult.h
     Database/QueryResultMysql.h
-    Database/QueryResultPostgre.h
     Database/SqlDelayThread.h
     Database/SqlOperations.h
     Database/SqlPreparedStatement.h
@@ -81,6 +80,7 @@ set (shared_SRCS
     nonstd/expected.hpp
     nonstd/nodiscard.hpp
     nonstd/optional.hpp
+    nonstd/saturating_cast.hpp
     TimePeriod.h
     ByteBuffer.cpp
     Common.cpp
@@ -90,18 +90,16 @@ set (shared_SRCS
     ServiceWin32.cpp
     ThreadPool.cpp
     Util.cpp
+    Utilities/Random.cpp
     Duration.h
-    WheatyExceptionReport.cpp
     Auth/AuthCrypt.h
     Auth/AuthCrypt.cpp
     Config/Config.cpp
     Database/Database.cpp
     Database/DatabaseMysql.cpp
-    Database/DatabasePostgre.cpp
     Database/DBCFileLoader.cpp
     Database/Field.cpp
     Database/QueryResultMysql.cpp
-    Database/QueryResultPostgre.cpp
     Database/SqlDelayThread.cpp
     Database/SqlOperations.cpp
     Database/SqlPreparedStatement.cpp
@@ -187,17 +185,8 @@ if(WIN32) # For window build: Exclude Unix/MacOS files
     IO/Filesystem/impl/unix/FileSystem.cpp
     IO/Filesystem/impl/unix/FileHandle.cpp
   )
-
-  if (NOT MSVC)
-    list(REMOVE_ITEM shared_SRCS
-      WheatyExceptionReport.cpp
-      WheatyExceptionReport.h
-    )
-  endif()
 else()
   list(REMOVE_ITEM shared_SRCS
-    WheatyExceptionReport.cpp
-    WheatyExceptionReport.h
     ServiceWin32.cpp
     ServiceWin32.h
     revision.h
@@ -248,6 +237,7 @@ source_group("Log"
 add_library(shared STATIC
   ${shared_SRCS}
 )
+mangos_target_flags(shared)
 
 target_include_directories(shared PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -258,6 +248,7 @@ target_include_directories(shared PUBLIC
   ${OPENSSL_INCLUDE_DIR}
   ${ZLIB_INCLUDE_DIRS}
 )
+target_compile_definitions(shared PUBLIC OPENSSL_NO_DEPRECATED) # Disable the usage of deprecated OpenSSL functions
 
 if(WIN32)
   target_include_directories(shared PUBLIC
@@ -290,14 +281,12 @@ if(UNIX)
 endif(UNIX)
 
 if(WIN32)
-  target_link_libraries(shared PUBLIC ws2_32 mswsock)
+  target_link_libraries(shared PUBLIC ws2_32 mswsock winmm)
 
   if(MINGW)
     # MinGW needs libseh for the debugger thread-name SEH handler in
     # CreateThread.cpp.
-    # MinGW also needs an explicit winmm link because it does not honor
-    # TimePeriod.cpp's Winmm.lib pragma.
-    target_link_libraries(shared PRIVATE libseh winmm)
+    target_link_libraries(shared PRIVATE libseh)
   endif()
 endif()
 
